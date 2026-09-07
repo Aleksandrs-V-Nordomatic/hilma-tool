@@ -23,14 +23,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # curl is kept for parity with the other country tools' transport, git is for
 # actions/checkout, ca-certificates
 # so TLS works at all. LibreOffice reads legacy Office formats; p7zip opens the .7z a buyer
-# ships a building project in; tesseract with `est` reads the scans no decoder can.
+# ships a building project in; tesseract with `fin` and `swe` reads the scans no decoder can.
+# Both, because Finland is officially bilingual and a bilingual municipality publishes the same
+# tender in each -- 276 rows in 5 174 carry no Finnish title at all.
 RUN apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends \
       ca-certificates curl git \
       python3 python3-pip python3-venv \
       p7zip-full \
       libreoffice-writer libreoffice-calc libreoffice-impress \
-      tesseract-ocr tesseract-ocr-est tesseract-ocr-eng \
+      tesseract-ocr tesseract-ocr-fin tesseract-ocr-swe tesseract-ocr-eng \
  && rm -rf /var/lib/apt/lists/*
 
 # Installed into the system interpreter on purpose: this image IS the environment, so a
@@ -47,7 +49,8 @@ RUN set -e; \
     git --version > /dev/null; \
     soffice --version > /dev/null; \
     7z i > /dev/null; \
-    tesseract --list-langs 2>&1 | grep -q '^est$'; \
+    tesseract --list-langs 2>&1 | grep -q '^fin$'; \
+    tesseract --list-langs 2>&1 | grep -q '^swe$'; \
     python3 -c "import fitz, docx, openpyxl, pptx, py7zr; print('converters import')"
 
 WORKDIR /work

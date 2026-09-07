@@ -230,7 +230,11 @@ def mime_for(path):
 
 # --------------------------------------------------------------------- the local reader
 OCR_DPI = 300           # below ~200 Tesseract loses Estonian diacritics on small print
-OCR_LANGS = "est+eng"   # tenders mix Estonian prose with English equipment names
+# FINNISH AND SWEDISH BOTH, AND NEITHER IS OPTIONAL. Finland is officially bilingual and a
+# bilingual municipality publishes its tender in both -- 276 of 5 174 rows over three months
+# carry no Finnish title at all, and on some of them the Swedish is the only text there is.
+# English is here for the equipment names that appear untranslated in every country.
+OCR_LANGS = "fin+swe+eng"
 OCR_MAX_PAGES = 200
 
 
@@ -239,7 +243,7 @@ def tesseract_read(blob, mime, model, api_key, timeout=900):
 
     PyMuPDF is already a pinned dependency for the deterministic path, so rendering pages
     costs no new package; Tesseract and its Estonian pack come from apt. `model` carries the
-    language string so a caller can widen it (`est+eng+rus`) without touching this code.
+    language string so a caller can widen it (`fin+swe+eng+rus`) without touching this code.
 
     Page headings match the deterministic extractor's (`## Lapa N`), so a downstream reader
     does not have to care which of the two produced a given document — only the manifest's
@@ -251,7 +255,7 @@ def tesseract_read(blob, mime, model, api_key, timeout=900):
 
     if not shutil.which("tesseract"):
         raise RuntimeError("tesseract is not installed — apt-get install tesseract-ocr "
-                           "tesseract-ocr-est, or choose another --provider")
+                           "tesseract-ocr-fin tesseract-ocr-swe, or choose another --provider")
 
     workdir = tempfile.mkdtemp(prefix="ocr_")
     try:
@@ -420,7 +424,7 @@ def main(argv=None):
                     choices=sorted(PROVIDERS),
                     help="who reads the scans (default: local OCR, no account needed)")
     ap.add_argument("--model", default=None,
-                    help="model name, or OCR language string like est+eng")
+                    help="model name, or OCR language string like fin+swe+eng")
     ap.add_argument("--reasons", default=",".join(DEFAULT_REASONS),
                     help="comma-separated substrings of the extractor's reason to act on")
     ap.add_argument("--max-files", type=int, default=None, help="stop after this many files")
