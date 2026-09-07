@@ -1,0 +1,67 @@
+name: egress-map
+
+# Everything known about the Finnish route was measured from a workstation. The tool runs on a
+# GitHub runner, from a datacentre address block, and no country report settles whether Hilma
+# treats those addresses the way it treats an office one. Latvia already pays for that question
+# not being asked early: EIS refuses roughly a third of the runner addresses it is offered,
+# which is why the Latvian day is four shards.
+#
+# Eight jobs at the same moment, each on its own runner, each downloading a few kilobytes. Volume
+# is held at zero, so anything that varies between them varies by address alone.
+#
+#   all pass             -> one runner, no sharding, no address lottery. Build the simple tool.
+#   some pass, some fail -> per-address. The Finnish day needs shards and retries on fresh runners.
+#   all fail             -> the datacentre range is refused as a range. A different tool entirely.
+#
+# THE COUNT IS THE POINT, not the status code. A bare `$filter` that loses its `$` in transit is
+# swallowed silently: Hilma answers 200 with the default page of the whole 157 981-document index.
+# So this job asserts the exact number the day is known to hold — 100 for 2026-09-02, measured
+# twice from a workstation — and a run that returns 200 with any other count has found the trap
+# rather than passed the test.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  draw:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - name: Draw ${{ matrix.n }}
+        run: |
+          IP=$(curl -s --max-time 15 https://api.ipify.org || echo unknown)
+
+          # The list endpoint, with the day whose exact total is known.
+          BODY=$(curl -s --connect-timeout 15 --max-time 40 -G \
+                 "https://www.hankintailmoitukset.fi/search/eformnotices" \
+                 --data-urlencode 'search=*' \
+                 --data-urlencode '$count=true' \
+                 --data-urlencode '$top=1' \
+                 --data-urlencode '$filter=datePublished ge 2026-09-02T00:00:00Z and datePublished lt 2026-09-03T00:00:00Z' \
+                 || echo '{}')
+          COUNT=$(printf '%s' "$BODY" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("@odata.count","FAIL"))' 2>/dev/null || echo FAIL)
+
+          # The detail address, which — unlike every rendered page on this portal — 404s honestly.
+          DET=$(curl -s -o /dev/null --connect-timeout 15 --max-time 40 -w '%{http_code}' \
+                "https://www.hankintailmoitukset.fi/web/api/public/procedure/36616/enotice/56114" \
+                || echo FAIL)
+
+          # One CDN attachment, first four bytes only. Enough to prove the file serves and that
+          # what arrives is a ZIP, without pulling 9 MB onto eight runners.
+          MAGIC=$(curl -s --connect-timeout 15 --max-time 40 -r 0-3 \
+                  "https://cdn.hankintailmoitukset.fi/public-attachments/1c2baa08-ce40-422a-00cb-08df08cea9e0" \
+                  | xxd -p 2>/dev/null || echo FAIL)
+
+          printf 'draw %s | ip %-16s | count %-6s | detail %s | attachment %s\n' \
+                 "${{ matrix.n }}" "$IP" "$COUNT" "$DET" "$MAGIC"
+
+          test "$COUNT" = "100" || { echo "::error::count is $COUNT, expected 100 — filter dropped or address refused"; exit 1; }
+          test "$DET"   = "200" || { echo "::error::detail returned $DET"; exit 1; }
+          test "$MAGIC" = "504b0304" || { echo "::error::attachment magic $MAGIC, expected 504b0304"; exit 1; }

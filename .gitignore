@@ -1,0 +1,14 @@
+out/
+__pycache__/
+*.pyc
+
+# A real recall policy never belongs in the repository — it goes in the FI_POLICY secret,
+# and the workflow writes it to policy.json on the runner. Only the *.example.json
+# illustration is committed, and it is deliberately about something nobody hunts for.
+policy.json
+fi_policy.json
+
+# Where a run puts what it fetched. Gigabytes of somebody else's documents, and the one
+# thing in this tree that must never reach a public repository.
+work/
+targets.txt

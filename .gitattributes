@@ -1,0 +1,3 @@
+# Keep the tree LF everywhere. A sibling country tool was checked in with CRLF and every
+# cross-tool diff then reported every line as changed, which hid a real 41-line drift.
+* text=auto eol=lf
