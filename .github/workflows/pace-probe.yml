@@ -1,24 +1,31 @@
 name: pace-probe
 
-# HOW FAST MAY THIS TOOL ASK? Measured from the runner, because that is where it will run.
+# HOW FAST MAY THIS TOOL ASK THE SEARCH INDEX? Measured from the runner, because that is where
+# it will run, and answered nowhere else.
 #
-# The endpoint does not answer a second question honestly. Asked for five different days in
-# quick succession from a workstation it answers the FIRST one five times: same rows, same
-# `@odata.count`, HTTP 200, and the filter it was given is nowhere in the answer. Only the
-# first request after an idle stretch is real. That is a rate limiter that serves a stale
-# response instead of a 429, and it is the most dangerous failure on this route -- a nightly
-# walking a fortnight would deliver the same day fourteen times and call it a catch-up.
+# WHAT IT IS LOOKING FOR. Asked for several different days in quick succession, the search
+# endpoint answers the FIRST question over and over: identical rows, identical `@odata.count`,
+# HTTP 200, and the filter it was given nowhere in the answer. Only the first request after an
+# idle stretch is real. That is a rate limiter serving a stale response instead of a 429, and it
+# is the most dangerous thing on this route -- a nightly walking a fortnight would deliver one
+# day fourteen times and call it a catch-up. Measured from a workstation on 2026-09-07: stale at
+# 2 s and at 15 s, honest at 20 s and above. The detail API does not do this and is honest at
+# 1 s, which is what keeps a day of tenders cheap.
 #
-# This job asks for six different days at a fixed gap and prints which day each answer actually
-# contains. A row of six matching days means the gap is safe; anything else names the gap that
-# is not.
+# The tool does not depend on this number for CORRECTNESS -- `fi_targets` checks that every row
+# it was handed falls inside the window it asked for, and stops when one does not. This job
+# decides how long a catch-up takes, not whether it is right.
+#
+# Six days, one gap, and the answer prints which day each response actually contained. Six
+# matching days means the gap is safe; anything else names a gap that is not.
+
 on:
   workflow_dispatch:
     inputs:
       gap:
-        description: "Seconds between requests"
+        description: "Seconds between search requests"
         required: false
-        default: "2"
+        default: "20"
 
 permissions:
   contents: read
@@ -26,25 +33,8 @@ permissions:
 jobs:
   pace:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8   # v5.0.0
       - name: Ask for six days, ${{ inputs.gap }}s apart
-        run: |
-          for d in 01 02 03 04 05 08; do
-            nxt=$(date -u -d "2026-09-$d +1 day" +%Y-%m-%d)
-            BODY=$(curl -s --connect-timeout 15 --max-time 40 -G \
-              "https://www.hankintailmoitukset.fi/search/eformnotices" \
-              --data-urlencode 'search=*' \
-              --data-urlencode '$count=true' \
-              --data-urlencode '$top=1000' \
-              --data-urlencode "\$filter=datePublished ge 2026-09-${d}T00:00:00Z and datePublished lt ${nxt}T00:00:00Z")
-            printf '%s' "$BODY" | python3 -c '
-import sys, json, collections
-d = json.load(sys.stdin)
-rows = d.get("value", [])
-days = collections.Counter((r.get("datePublished") or "")[:10] for r in rows)
-print("  asked 2026-09-'"$d"'  count=%s rows=%d  got=%s"
-      % (d.get("@odata.count"), len(rows), dict(sorted(days.items()))))
-'
-            sleep ${{ inputs.gap }}
-          done
+        run: python3 tools/pace_probe.py --gap "${{ inputs.gap }}"
