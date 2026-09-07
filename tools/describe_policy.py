@@ -23,7 +23,8 @@ import policy
 
 # Read BY POSITION, never unpacked. A fixed-width unpack breaks the night the day the policy
 # grows a field, and this script exists to protect the night.
-NAMES = ("recall term", "excluded division", "excluded title term", "override", "recall code")
+NAMES = ("recall term", "excluded code prefix", "excluded title term", "override",
+         "recall code")
 
 
 def main(argv=None):
@@ -61,6 +62,21 @@ def main(argv=None):
         print("::warning::no recall term is written with spaces around it. In Finnish that "
               "means every abbreviation is matched as a bare substring, which is how `lvi` "
               "comes to match `pilvisiirtyma`. See fi_policy.example.json.")
+
+    # A WIDE EXCLUSION IS ABSOLUTE AND SILENT, and it is the one policy mistake this gate
+    # cannot fail loudly on. `hard_exclude_prefixes` is tested BEFORE the recall terms, so a
+    # notice whose every code sits inside an excluded prefix is dropped however well its text
+    # matches -- which is correct, and is why the prefixes exist, and is also why a prefix that
+    # names a whole division deletes a fifth of a day without a word. Measured on 5 925 Latvian
+    # notices: excluding division 45 would have dropped 591 of the 2 147 the gate kept, 71 would
+    # have dropped 420, 50 would have dropped 204. Both live policies write theirs four to six
+    # digits long.
+    wide = sorted(p for p in (rules[1] if len(rules) > 1 else ()) if len(str(p)) < 4)
+    if wide:
+        print("::warning::%s exclude(s) a whole CPV division rather than a purchase: %s. An "
+              "exclusion beats a matching title, so this drops every notice carrying only "
+              "codes in it -- silently. Lengthen the prefix, or add an override_prefixes entry."
+              % (len(wide), ", ".join(wide)))
     return 0
 
 
