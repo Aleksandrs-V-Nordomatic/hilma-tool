@@ -8,7 +8,7 @@ writing under another country's folder is a failure that succeeds: the upload re
 the index is valid, and a reader is handed the wrong country's tenders with nothing anywhere
 saying so.
 
-This repository is the Estonian tool and reads RHR only. The check below still runs, and
+This repository is the Finnish tool and reads Hilma only. The check below still runs, and
 still refuses, because a country tool that assumes its own country is a country tool that
 cannot say when it was pointed at the wrong drive.
 
@@ -18,11 +18,11 @@ mismatch expressible in the first place.
 
 THE DESTINATION IS DERIVED, NOT CONFIGURED. `GRAPH_DEST_ROOT` names the project's runtime
 folder — the `work/` a reader knows — and the country code is appended to it. It is not
-enough to ask the deployment to set `GRAPH_DEST_ROOT` to `…/work/EE` and trust it: that is
+enough to ask the deployment to set `GRAPH_DEST_ROOT` to `.../work/FI` and trust it: that is
 the same two-places-to-get-right this file exists to remove, and the first symptom of
 getting it wrong is a day of one country's tenders sitting in another's folder. A root that
 already ends in a country code is therefore refused rather than appended to, because
-`work/EE/EE` is the other way the same mistake shows up.
+`work/FI/FI` is the other way the same mistake shows up.
 
 THE SOURCE IS DERIVED TOO. A code with no source module is refused, never guessed at and
 never quietly served by the other country's reader.
@@ -33,17 +33,17 @@ import re
 # The country this repository fetches, and the modules that read its portal.
 #
 # ONE COUNTRY PER REPOSITORY, AND THE TABLE STAYS. It would be shorter to delete this file
-# in a single-country tool and hard-code EE, and that is exactly what must not happen: the
+# in a single-country tool and hard-code FI, and that is exactly what must not happen: the
 # table is what makes `resolve` able to REFUSE. A run that names no country, or names the
-# wrong one, stops here with a sentence instead of quietly fetching Estonia and filing it
+# wrong one, stops here with a sentence instead of quietly fetching Finland and filing it
 # under somebody else's folder. That guard is worth more than the line it costs.
 #
 # Making the next country's tool: fork this repository, replace the entry below and the two
 # modules it names, and change the name and the README. Nothing else in the tool learns a
 # country name, so nothing else has to be found and edited.
 SOURCES = {
-    "EE": {"page": "ee_page", "fetch": "ee_fetch",
-           "portal": "RHR", "timezone": "Europe/Tallinn"},
+    "FI": {"page": "fi_page", "fetch": "fi_fetch",
+           "portal": "Hilma", "timezone": "Europe/Helsinki"},
 }
 
 CODE = re.compile(r"^[A-Z]{2}$")
@@ -102,7 +102,7 @@ def destination(base, code):
     tail = trimmed.rsplit("/", 1)[-1].upper()
     if CODE.match(tail):
         # Almost always the deployment doing the tool's job for it, which is how
-        # `work/EE/EE` gets created and then quietly filled.
+        # `work/FI/FI` gets created and then quietly filled.
         raise Mismatch("destination root %r already ends in a country code; give the "
                        "folder that CONTAINS the country folders" % trimmed)
     return "%s/%s" % (trimmed, code)
@@ -114,7 +114,7 @@ def parser_files(code):
     `changes` records a parser version so that an improvement to a reader — one more field
     read, a value that used to come back null — is not reported as an amendment on every
     procurement in the corpus. That only works if the version follows the reader the run
-    actually used: stamping another country's digest onto this one makes an `ee_page` edit
+    actually used: stamping another country's digest onto this one makes an `fi_page` edit
     invisible and an unrelated edit a false alarm, in the same run and for the same reason.
     """
     return (SOURCES[resolve(code)]["page"] + ".py",)

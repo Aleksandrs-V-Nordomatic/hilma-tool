@@ -1,0 +1,32 @@
+{
+  "_what": "Example Finnish recall policy. Copy this shape into the FI_POLICY secret; do not commit a real one.",
+  "_rule": "Excluded term in any read text, or a code set entirely inside excluded divisions => drop. No text at all => keep. Otherwise keep when a read text contains a recall_title_terms root, or a code matches a recall_cpv_prefix. Codes never veto matching text.",
+  "_surfaces": "FOUR texts are read here, not one. The display title; every language's title concatenated; the buyer's own description in every language; and the classification name, which Hilma does not serve and which is therefore always empty. The description matters most: this index carries it in the SEARCH ROW at a median of 964 characters, so the gate decides before a single request is made for the tender.",
+  "_languages": "Never take the first non-empty title. 276 of 5 174 rows over three months carry no Finnish title at all, and every one of them carries a title in another language. A bilingual municipality writes different words in Finnish and Swedish, so the languages are added together rather than chosen between.",
+  "_roots": "Finnish inflects heavily, so a term written bare is matched as a substring: `huolto` catches huolto, huollon, huoltotyöt. Watch for stems that hide inside unrelated words.",
+  "_boundaries": "AND THIS IS THE FINNISH-SPECIFIC PART. Our signal is carried by three- and four-letter section abbreviations, and as bare substrings they are dangerous: `lvi` matches `pilvisiirtymä` on 18 titles in four days, `lvia` matches the street `Talvialantie`, `huolto` matches `huoltonosturi`, a crane. A term WRITTEN WITH SPACES AROUND IT matches only on a token boundary, because the gate folds every run of punctuation into a space and pads the whole text. Measured over 5 174 rows: bare `lvi` matches 791 rows and ` lvi ` matches 70; bare `lvia` 102 and ` lvia ` 55. So write the abbreviations spaced and the words bare, in one list.",
+  "recall_title_terms": [
+    " lvia ",
+    " lvi ",
+    "ilmanvaihto",
+    "kopiokone",
+    "tulostuspalvelu",
+    "toimistotarvikk"
+  ],
+  "_note": "Apart from the two spaced abbreviations, which are here to demonstrate the boundary rule, the terms above are an unrelated illustration (office printing) chosen so that this file discloses nothing about any deployment's interests.",
+  "hard_exclude_prefixes": [
+    "30"
+  ],
+  "hard_exclude_title_terms": [
+    "väriaine",
+    "mustekasetti"
+  ],
+  "_overrides": "Codes read anyway, wherever their division sits: a contract can carry a main code inside an excluded division and nothing else, and a buyer files a purchase under the service it is bought as rather than the thing it is.",
+  "override_prefixes": [
+    "30199"
+  ],
+  "_recall_codes": "Codes that recall on their own, for the procurement whose title is vague and whose code is exact. Exclusions still bind: this widens what is fetched and can never drop anything. Unlike Estonia's, the Finnish search row DOES carry the codes, so these bite on every row.",
+  "recall_cpv_prefixes": [
+    "79810"
+  ]
+}

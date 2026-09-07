@@ -88,13 +88,24 @@ ATTACHMENT_READY = 10
 # about who is running it.
 UA = "Mozilla/5.0 (compatible; eis-tool)"
 
-# THE INDEX RATE-LIMITS, AND A 429 IS NOT AN EMPTY DAY. About thirty back-to-back requests
-# triggered one during the route measurement and it persisted for the rest of the burst;
-# 0.4-1.2 s between requests was never limited across some forty further calls. `net.py` already
-# treats 429 as retryable and honours Retry-After -- what it cannot do is stop us earning one, so
-# the pace is kept here. The jitter is not decoration: a fixed gap from a fixed start is a
-# pattern, and Hilma's own Interfaces page asks that the interface be used sparingly.
-PACE = (0.4, 1.2)
+# TWO PACES, BECAUSE THE TWO ENDPOINTS MISBEHAVE DIFFERENTLY, AND THIS IS MEASURED.
+#
+# The search index does not refuse a request it does not want to answer. It answers it with the
+# PREVIOUS request's rows -- same records, same `@odata.count`, HTTP 200, and the filter that was
+# sent nowhere in the reply. Asked for six different days two seconds apart from a workstation on
+# 2026-09-07 it returned the first day six times. At twenty seconds it was honest six times out
+# of six. From a GitHub runner, five seconds was honest six times out of six: the limiter is per
+# address, and the address that has been asking all week is the one it has stopped answering.
+#
+# The detail API does none of this: six different notices at one-second intervals returned six
+# different notices. Which is what makes a day affordable -- the expensive pace applies to one
+# request per day of window, not to one per tender.
+#
+# THE PACE IS NOT WHAT MAKES THE RUN CORRECT. `fi_targets` checks that every row it was handed
+# falls inside the window it asked for and re-asks when one does not, so a throttled address
+# makes a run slow rather than wrong. This number decides how long a catch-up takes.
+SEARCH_PACE = float(os.environ.get("HILMA_SEARCH_PACE") or 6.0)
+DETAIL_PACE = (0.4, 1.2)
 
 # An award notice looks exactly like a tender -- title, buyer, CPV, description -- and they are
 # 35% of the volume. A run that does not separate them publishes a month of already-decided
@@ -102,8 +113,30 @@ PACE = (0.4, 1.2)
 AWARD_TYPES = ("ContractAwardNotices",)
 PLAN_TYPES = ("ProcurementPlan",)
 CONSULTATION_TYPES = ("PriorInformationNotices",)
+# `Sopimusmuutos` -- a change to a contract that was already awarded. Nothing to bid for, and it
+# is the one row on the measured day that is neither a competition nor an award.
+MODIFICATION_TYPES = ("Modification",)
 
-_last_request = [0.0]
+# THE POPULATIONS A CARD CAN COME FROM. Everything else is history: an award closes a
+# competition, a modification changes a contract somebody else already won. Publishing either
+# as a new opportunity is the failure this route makes easiest -- awards are 35% of the volume
+# and carry a title, a buyer, a CPV and a description exactly like a live tender does.
+LIVE_KINDS = ("tender", "amendment", "consultation", "plan")
+
+class Refused(RuntimeError):
+    """The portal answered, and the answer was that this notice is not there.
+
+    A type rather than a string, so a caller can tell it from "we could not ask" -- which
+    `net.Unreachable` is -- without matching on a message. The two must never be recorded the
+    same way: a notice we could not reach is a gap in the run, a notice the portal says is gone
+    is a fact about the tender, and on this portal it is usually a corrigendum having superseded
+    it rather than a withdrawal.
+    """
+
+
+# One clock per endpoint. Sharing one would make every detail request wait out the search pace
+# and turn a day of sixty tenders into six minutes of sleeping for no reason.
+_last = {"search": 0.0, "detail": 0.0}
 
 
 def log(message):
@@ -111,12 +144,20 @@ def log(message):
     sys.stdout.flush()
 
 
-def _pace():
-    """Wait out the gap since the previous request, whoever made it."""
-    gap = random.uniform(*PACE) - (time.time() - _last_request[0])
+def _pace(which, seconds=None):
+    """Wait out the gap since the previous request to this endpoint, whoever made it.
+
+    The jitter is not decoration: a fixed gap from a fixed start is a pattern, and Hilma's own
+    Interfaces page asks that the interface be used sparingly.
+    """
+    if seconds is None:
+        seconds = (SEARCH_PACE if which == "search" else random.uniform(*DETAIL_PACE))
+    if which == "search":
+        seconds = seconds * random.uniform(1.0, 1.25)
+    gap = seconds - (time.time() - _last[which])
     if gap > 0:
         time.sleep(gap)
-    _last_request[0] = time.time()
+    _last[which] = time.time()
 
 
 def _headers():
@@ -139,21 +180,21 @@ def search(params, timeout=60):
         if value is None:
             continue
         query[key if key == "search" else "$%s" % key] = value
-    _pace()
+    _pace("search")
     url = "%s?%s" % (SEARCH, urllib.parse.urlencode(query))
     body, _ = net.get_json(url, headers=_headers(), timeout=timeout, log=log)
     return body
 
 
-def notice(procedure_id, notice_id, timeout=60):
-    """One notice, whole, from the address that tells the truth about whether it exists.
+def detail(procedure_id, notice_id, timeout=60):
+    """The notice document, whole, from the address that tells the truth about whether it exists.
 
     Returns the parsed detail document, or None when the portal says 404 -- which it does
     correctly here and nowhere else. A caller must treat None as "no such notice", never as
     "could not ask": `net` raises `Unreachable` for the second, and the two must not be recorded
     the same way.
     """
-    _pace()
+    _pace("detail")
     try:
         body, _ = net.get_json(DETAIL % (procedure_id, notice_id), headers=_headers(),
                                timeout=timeout, log=log)
@@ -184,6 +225,7 @@ def kind_of(row):
                       something anybody can deliver.
         plan          a procurement plan. Intent, months out, and no notice yet.
         award         the competition is over. Never publish one as new.
+        modification  a change to a contract already awarded. Nothing to bid for.
         amendment     a corrigendum. It supersedes and DELETES the notice it replaces, so it is
                       news about a tender already on the board, not a second tender.
 
@@ -196,11 +238,23 @@ def kind_of(row):
         return "plan"
     if main in AWARD_TYPES:
         return "award"
+    if main in MODIFICATION_TYPES:
+        return "modification"
     if row.get("isCorrigendum"):
         return "amendment"
     if main in CONSULTATION_TYPES:
         return "consultation"
     return "tender"
+
+
+def is_live(row_or_record):
+    """Could somebody still bid for this? The question the day counts on.
+
+    Takes an index row or a built record, because both callers exist and getting the two
+    confused is how an award gets counted as an opportunity.
+    """
+    kind = row_or_record.get("kind") if "kind" in row_or_record else kind_of(row_or_record)
+    return kind in LIVE_KINDS
 
 
 def home_id(row):
@@ -304,14 +358,21 @@ def documents_available(row):
     return "external"
 
 
-def record(row):
-    """One index row in the small shape the day and the gate work with.
+def notice(row, detail=None, kind=None):
+    """One tender's facts, in the shape every country tool in this family produces.
+
+    `row` is the index row and is the source of almost everything: this index carries eighty-six
+    fields at list level, including the buyer's own description, so the facts a card needs are
+    complete before any second request is made. `detail` is the notice document and adds only
+    what the index does not state -- which today is nothing a card reads, and is passed anyway so
+    that the seam matches the other countries' and so a later field has somewhere to arrive.
 
     The gate reads `title`, `titles`, `description` and `cpv_name` and nothing else, and it reads
-    them before a single request is made for this tender -- the index row carries the description
-    at list level, median 964 characters, which is what makes that possible here.
+    them before a single request is made for this tender -- which is what makes Finland's whole
+    window gateable for the cost of the one request that discovered it.
     """
     codes = cpv_codes(row)
+    detail = detail or {}
     return {
         "pid": home_id(row),
         "procedure_id": row.get("procedureId") or None,
@@ -320,7 +381,7 @@ def record(row):
         "ref": row.get("noticeNumber") or str(row.get("id") or ""),
         "row_id": row.get("id"),
         "shape": shape_of(row),
-        "kind": kind_of(row),
+        "kind": kind or kind_of(row),
         "main_type": row.get("mainType"),
         "type": row.get("type"),
         # The display title: Finnish when there is one, and whatever there is when there is not.
@@ -363,27 +424,58 @@ def record(row):
     }
 
 
-def attachments_of(detail):
-    """The files the portal will serve, from a detail document. Never the ones it will not.
+def catalogue(detail):
+    """Every document the portal lists for a notice, the ones it will serve and the rest apart.
 
     `status` is 10 on every attachment observed. A different value has never been seen and is
     therefore treated as not-yet-available rather than guessed at: downloading it would fetch an
     error page under a 200, and the manifest would carry it as a document.
+
+    There is no per-file timestamp anywhere in this API -- nothing here corresponds to Estonia's
+    `stampUpd`. What catches a replaced specification is the set of attachment GUIDs, compared
+    between runs by the fingerprint.
     """
-    out = []
+    public, withheld = [], []
     for entry in (detail or {}).get("attachments") or []:
         identity = entry.get("id")
         if not identity:
             continue
-        out.append({
+        row = {
             "id": identity,
             "name": entry.get("name") or identity,
             "status": entry.get("status"),
             "entity_type": entry.get("attachmentEntityType"),
             "ready": entry.get("status") == ATTACHMENT_READY,
             "download": ATTACHMENT % identity,
-        })
-    return out
+        }
+        (public if row["ready"] else withheld).append(row)
+    return public, withheld
+
+
+def collect(row, kind=None):
+    """The facts and the catalogue, in the one request that carries them.
+
+    One, not three: this index states the tender at list level, so the only thing the notice
+    document adds is the attachment list. A tender whose documents live on somebody else's
+    platform costs no request at all here, and that is most of them.
+
+    THE DETAIL CALL IS ALSO THE LINK CHECK. It is the one address on this portal that answers 404
+    for something that is not there -- every rendered page answers 200 with the same 9 684-byte
+    shell -- so asking it does two jobs. A notice number that comes back different from the one
+    asked for is a link this run must not publish, and `link_verified` says so.
+    """
+    facts = notice(row, kind=kind)
+    document, verified = None, None
+    if facts["shape"] == "eforms" and facts.get("procedure_id") and facts.get("notice_id"):
+        document = detail(facts["procedure_id"], facts["notice_id"])
+        if document is None:
+            raise Refused("the portal has no notice at procedure %s / notice %s"
+                          % (facts["procedure_id"], facts["notice_id"]))
+        verified = str(document.get("noticeNumber") or "") == str(facts.get("ref") or "")
+    public, withheld = catalogue(document)
+    facts.update({"link_verified": verified, "documents": public,
+                  "withheld_documents": withheld, "detail": document})
+    return facts
 
 
 def main(argv=None):
@@ -395,10 +487,8 @@ def main(argv=None):
     row = fi_targets.one(args.reference)
     if row is None:
         raise SystemExit("fi_page: the index served no row for %s" % args.reference)
-    detail = (notice(row["procedure_id"], row["notice_id"])
-              if row["shape"] == "eforms" else None)
-    out = {k: v for k, v in row.items() if k != "record"}
-    out["attachments"] = attachments_of(detail)
+    out = {k: v for k, v in collect(row["record"]).items()
+           if k not in ("record", "detail")}
     json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
     print()
     return out

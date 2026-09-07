@@ -154,7 +154,7 @@ class Delivery(unittest.TestCase):
         self.drive.sent = []
         # Latvian delivery, and it now has to say so: the country picks both the reader
         # and the folder published to, and neither has a default.
-        deliver_graph.main(["--packs", self.root, "--shard", shard, "--country", "EE",
+        deliver_graph.main(["--packs", self.root, "--shard", shard, "--country", "FI",
                             "--date", date or self.date, "--tool", tool,
                             "--run-id", "run-%s" % (date or self.date)])
         return self.drive.paths()
@@ -163,7 +163,7 @@ class Delivery(unittest.TestCase):
     # folder that CONTAINS the country folders, and the tool appends the code. These two
     # helpers are the only place the tests know that, which is what makes the change one
     # line rather than thirty-six.
-    DEST = "dest/EE"
+    DEST = "dest/FI"
 
     def home(self, pid="111"):
         return "%s/tenders/%s" % (self.DEST, pid)
@@ -606,7 +606,7 @@ class DeliveredStructure(Delivery):
             pack(other, "222", [("spec.pdf", "no numbering here")])
             self.drive.sent = []
             deliver_graph.main(["--packs", other, "--shard", "2", "--date", self.date,
-                                "--country", "EE"])
+                                "--country", "FI"])
             self.assertNotIn("structure.json", self.entries("222"))
         finally:
             shutil.rmtree(other, ignore_errors=True)

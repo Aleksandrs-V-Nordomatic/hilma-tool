@@ -1,0 +1,65 @@
+name: hilma-fetch
+
+# One Finnish tender, by the number a person quotes, into a home on the drive.
+#
+# WHAT IT IS FOR, AND WHAT IT IS NOT. It answers "read this one now" -- a card somebody is
+# looking at, a corrigendum that has just landed, a specification that was replaced. It is not a
+# way to build a day: a day is `hilma-day`, which proves what it fetched, and a pile of single
+# fetches proves nothing about a window.
+#
+# NO RECALL POLICY HERE, AND THAT IS THE POINT. The gate decides what is worth fetching for the
+# FIRST time. A number somebody has typed into this box has already been judged worth reading by
+# a person, and running it past the gate would silently answer nothing at all.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reference:
+        description: "The notice number, e.g. 2026-056114"
+        required: true
+      no-text:
+        description: "Download without extracting, when only the files are wanted"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: ${{ vars.TOOLCHAIN_IMAGE }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fetch one notice
+        env:
+          EIS_COUNTRY: FI
+          REFERENCE: ${{ inputs.reference }}
+        run: |
+          # A NOTICE THAT IS GONE IS USUALLY NOT A WITHDRAWAL, and the tool says so rather than
+          # exiting on a bare "not found". A corrigendum supersedes its predecessor and the
+          # index then DELETES the predecessor -- four for four in the measured sample, and
+          # corrigenda are 6.6% of rows -- so the number on an older card routinely resolves to
+          # nothing while the tender is very much alive under a new one.
+          python3 eis_tool.py fetch "$REFERENCE" --out work
+          # The fetch writes its own day folder, suffixed so it can never collide with a
+          # window's, and prints the name. The delivery below reads it from here.
+          echo "FETCH_DAY=$(date -u +%F)-fetch-$REFERENCE" >> "$GITHUB_ENV"
+
+      # Delivered under the day the fetch happened, so it lands beside the nights rather than in
+      # a shape nothing else reads.
+      - name: Deliver it where the reader can reach it
+        if: ${{ success() && env.HAVE_GRAPH == 'true' }}
+        env:
+          HAVE_GRAPH: ${{ secrets.GRAPH_DRIVE_ID != '' }}
+          GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
+          GRAPH_DRIVE_ID: ${{ secrets.GRAPH_DRIVE_ID }}
+          GRAPH_DEST_ROOT: ${{ secrets.GRAPH_DEST_ROOT }}
+          EIS_COUNTRY: FI
+        run: python3 deliver_fi.py --out work --date "$FETCH_DAY"

@@ -301,7 +301,7 @@ class PipelineVersion(unittest.TestCase):
 
 
 class ANewParserIsNotAnAmendment(unittest.TestCase):
-    """The facts are read by `ee_page`, and improving it must not accuse every buyer at once.
+    """The facts are read by `fi_page`, and improving it must not accuse every buyer at once.
 
     A spelling added to a label map, a field that used to come back null — one such edit
     changes facts across the whole corpus in a single day. Compared blind, that is an
@@ -318,7 +318,7 @@ class ANewParserIsNotAnAmendment(unittest.TestCase):
         # Sharing one value would re-upload every document of every tender for an edit that
         # cannot change a character of Markdown.
         self.assertNotEqual(changes.PARSER_FILES, changes.PIPELINE_FILES)
-        self.assertNotIn("ee_page.py", changes.PIPELINE_FILES)
+        self.assertNotIn("fi_page.py", changes.PIPELINE_FILES)
         self.assertNotIn("normalize.py", changes.PARSER_FILES)
 
     def test_facts_are_not_compared_across_a_parser_change(self):

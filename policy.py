@@ -25,6 +25,15 @@ import re
 # substrings rather than as whole words because the language this runs against inflects
 # heavily; precision belongs to the later document-reading step, not to a title.
 #
+# AND FINLAND NEEDS BOTH KINDS OF MATCH IN ONE LIST, WHICH IT ALREADY HAS. Finnish carries our
+# signal in three- and four-letter section abbreviations -- LVIA, RAU, SAH, KVR, ST -- and a
+# bare substring finds them inside innocent words: `lvi` matches `pilvisiirtyma` on 18 titles in
+# four days, `lvia` matches the street `Talvialantie`, `huolto` matches `huoltonosturi`, a
+# crane. No second matcher is needed for this. `fold` below turns every run of punctuation into
+# a space and pads the whole string, so a term WRITTEN WITH SPACES AROUND IT -- ` lvia ` --
+# matches only on a token boundary, while one written bare stays a substring. The two
+# behaviours live in one list and the policy author chooses per term.
+#
 # Two guards matter, and both fail toward fetching:
 #   * no text at all means no evidence, so the notice is fetched;
 #   * a classification code never vetoes a matching title, because the code is assigned by
@@ -39,7 +48,7 @@ import re
 # filter without learning what anyone points it at. An absent or unreadable policy means
 # fetch everything, which is the only safe direction for a filter that failed to load:
 # fetching too much costs time, and dropping silently costs a tender.
-POLICY_ENV = "EE_POLICY"
+POLICY_ENV = "FI_POLICY"
 
 # THE NAMES THIS TOOL DOES NOT READ, CHECKED RATHER THAN IGNORED. Every country tool in
 # this family names its policy after its own country, and a deployment is set up by copying
@@ -47,7 +56,7 @@ POLICY_ENV = "EE_POLICY"
 # policy at all here, and no policy means fetch everything -- a whole day drawn from a state
 # register, reported as success. The one failure shape nobody catches is an empty morning
 # that reads exactly like a quiet one, so a foreign name stops the run instead.
-FOREIGN_POLICY_ENVS = ("EIS_POLICY", "LT_POLICY")
+FOREIGN_POLICY_ENVS = ("EIS_POLICY", "LT_POLICY", "EE_POLICY")
 
 
 def load_policy(source=None):
@@ -99,19 +108,24 @@ def load_policy(source=None):
             # gate could hear only the three words. Absent, this changes nothing.
             tuple(policy.get("recall_cpv_prefixes") or ()))
 
-# THE TEXTS THE GATE READS, AND WHY THERE ARE TWO OF THEM HERE.
+# THE TEXTS THE GATE READS, AND WHY THERE ARE FOUR OF THEM HERE.
 #
-# A title is the obvious surface and in most countries it is the only one. This register
-# publishes a second for free: `mainCpvName` — the Estonian name of the classification the
-# buyer chose — and it is worth reading, because a buyer will often write a short and
-# meaningless title and then classify the purchase precisely. The title says "Aamse ja Nihka
-# küla, KIRI" and the classification says what is actually being bought.
+# A title is the obvious surface and in most countries it is the only one. This index publishes
+# three more for free, and each of them is here because leaving it out was measured to lose
+# notices.
 #
-# It matters more here than it would elsewhere: the search row carries no description at all
-# (`shortDescription` is empty on every row the register serves) and no classification CODE,
-# only its name. So these two texts are everything the gate has, and dropping one of them
-# would put the whole weight on a title that buyers do not write for us.
-TEXT_SURFACES = ("title", "name", "cpv_name")
+#   `title`        the display title -- Finnish where there is one.
+#   `titles`       ALL FOUR LANGUAGES CONCATENATED, never the first non-empty one. 276 of 5 174
+#                  rows over three months carry no `titleFi` at all, and on some of them the
+#                  Swedish or English title is the only one there is. A bilingual municipality
+#                  writes different words in each, so the languages have to be added, not
+#                  chosen between. `fi_page.texts` builds it.
+#   `description`  the buyer's own description, in every language, at a median of 964
+#                  characters. This index carries it in the SEARCH ROW, which is what lets the
+#                  gate decide before a single request is made for the tender.
+#   `cpv_name`     empty in Finland -- the index serves classification codes and no names --
+#                  and kept so the surface list stays the same shape in every country tool.
+TEXT_SURFACES = ("title", "titles", "description", "cpv_name")
 
 
 # EVERY RUN OF PUNCTUATION BECOMES ONE SPACE, AND THE WHOLE STRING IS PADDED WITH ONE.

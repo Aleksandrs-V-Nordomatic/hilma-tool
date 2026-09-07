@@ -1,0 +1,212 @@
+name: hilma-day
+
+# One Finnish window, fetched, proved and delivered.
+#
+# WHY THIS IS ONE RUNNER. A country tool whose portal refuses part of the cloud address space
+# needs several runners drawing several addresses, each shard retrying its own chain, and a
+# reconciliation job afterwards merging their indexes. Latvia pays for exactly that. Hilma was
+# asked from eight runner addresses at one moment on 2026-09-07 and answered all eight with the
+# exact day: one runner, one pass, no address lottery, and the day's two files written directly.
+#
+# WHY IT TAKES A RANGE AND NOT A DATE. A night that did not run is a day of notices nobody
+# reads, and the index does not publish them again. One request answers a fortnight as easily as
+# a day, so a run that was missed is caught up by widening the window rather than by running
+# twice -- which would be two draws at one index for one date and two answers about what that
+# date held.
+#
+# THE DATES ARE UTC AND FINLAND IS NOT. `datePublished` is UTC, Helsinki runs two or three hours
+# ahead, and notices are published as late as 18:36 UTC. Every date below is a UTC date.
+
+on:
+  # NO SCHEDULE, DELIBERATELY, and for the same reason in every country tool. The consumer that
+  # reads the day is the one that starts it, so there is exactly one actor per day and no
+  # second, redundant fetch of the same window. GitHub's cron is a wish that can fire hours
+  # late, and nothing that must finish before a fixed hour can be built on it.
+  #
+  # AND IF ONE IS EVER ADDED HERE, IT MUST NOT BE WEEKDAY-ONLY. The batch that forwards notices
+  # to TED runs on SUNDAYS: 2026-08-30 carried 72 notices, 65 of them EU, against 39 on the
+  # Monday. A Monday-to-Friday schedule loses a working day's worth of the EU tier every week
+  # and nothing anywhere reports it.
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "First day of the window, YYYY-MM-DD in UTC. Blank means yesterday"
+        required: false
+        default: ""
+      to:
+        description: "Last day of the window. Blank means the same as the first -- one day"
+        required: false
+        default: ""
+      targets:
+        description: "Notice numbers to re-read whatever the gate says -- the cards somebody is still deciding about. One per line; FI:<number> or the bare number"
+        required: false
+        default: ""
+      limit:
+        description: "Stop after this many tenders -- for a trial run, not for a night"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+# One run per day, because two runs are two draws at one index for one date and two `day.json`
+# files for that date, the second describing less than the first.
+concurrency:
+  group: hilma-day
+  cancel-in-progress: false
+
+jobs:
+  day:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    # The pinned toolchain. LibreOffice reads the Office attachments buyers still send, p7zip
+    # opens the archives a building project arrives in, and Tesseract with the Finnish pack
+    # reads the scans -- none of which `apt-get` on the day would install at a fixed version.
+    container:
+      image: ${{ vars.TOOLCHAIN_IMAGE }}
+    steps:
+      # Pinned to a full SHA because this repository's Actions policy allows nothing else.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test
+        run: python3 -m unittest discover -s tests -t tests
+
+      # THE WINDOW IS DECIDED ONCE, HERE, AND EVERY LATER STEP READS IT. Computed independently
+      # in the fetch step and again in the delivery step, a run that crossed UTC midnight
+      # between them would fetch one folder and deliver another -- and the second one does not
+      # exist.
+      #
+      # The default is YESTERDAY, not today: the window is by publication date, and a day that
+      # has barely started would be delivered near-empty and call itself complete.
+      - name: Which window this is
+        env:
+          RUN_DATE: ${{ inputs.date }}
+          RUN_TO: ${{ inputs.to }}
+        run: |
+          DAY="${RUN_DATE:-$(date -u -d 'yesterday' +%F)}"
+          echo "DAY=$DAY" >> "$GITHUB_ENV"
+          echo "DAY_TO=${RUN_TO:-$DAY}" >> "$GITHUB_ENV"
+          echo "the window is $DAY .. ${RUN_TO:-$DAY}, in UTC"
+
+      # WILL THIS ADDRESS BE TOLD THE TRUTH? The search index does not refuse a request it does
+      # not want to answer -- it answers with the PREVIOUS request's rows, under a 200, with a
+      # matching `@odata.count`. Whether it does that depends on the address, so this is a real
+      # question with a real answer and it is worth one request before the night starts.
+      #
+      # `fi_targets` would catch it anyway and re-ask with a longer wait; this step is here so
+      # that a slow night has a reason printed at the top of its log rather than in the middle.
+      - name: Will this address be told the truth
+        env:
+          EIS_COUNTRY: FI
+        run: python3 eis_tool.py probe || echo "::warning::the probe was not clean -- the run will still be correct, but discovery will re-ask and take longer"
+
+      # ASK THE DESTINATION BEFORE WALKING THE PORTAL. The delivery is the last step of the
+      # night, so an expired client secret or a moved folder would be discovered after every
+      # attachment has been downloaded -- the most expensive moment to learn something one
+      # request answers. A client secret expires on a date nobody has in their calendar, and
+      # when it does the night dies whole and silently.
+      #
+      # With no delivery secrets configured the step does not run at all, and the workflow stays
+      # usable by anyone without carrying anybody's addresses.
+      - name: Can this run deliver what it is about to fetch
+        if: ${{ env.HAVE_GRAPH == 'true' }}
+        env:
+          HAVE_GRAPH: ${{ secrets.GRAPH_DRIVE_ID != '' }}
+          GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
+          GRAPH_DRIVE_ID: ${{ secrets.GRAPH_DRIVE_ID }}
+          GRAPH_DEST_ROOT: ${{ secrets.GRAPH_DEST_ROOT }}
+          EIS_COUNTRY: FI
+        run: python3 deliver_fi.py --check
+
+      # THE GATE IS CHECKED BEFORE THE PORTAL IS TOUCHED, AND THIS IS WHY IT IS A STEP.
+      # `policy.load_policy` fails open on purpose -- an unreadable policy returns None rather
+      # than dropping every notice, which is the right call inside a library. For an unattended
+      # night it is the wrong outcome: no gate means fetching every attachment the window holds,
+      # because a secret was misspelt.
+      - name: The recall policy, and how much of the window it lets through
+        env:
+          FI_POLICY: ${{ secrets.FI_POLICY }}
+        run: |
+          # THE SECRET IS REQUIRED, AND FALLING BACK TO THE COMMITTED FILE WOULD BE WORSE THAN
+          # STOPPING. `fi_policy.example.json` is an unrelated illustration -- office printing --
+          # chosen so the repository discloses nothing about what anybody actually hunts for. A
+          # night run against it would fetch almost nothing, deliver a valid day, and report
+          # success, which is the one failure shape nobody catches: an empty morning reads
+          # exactly like a quiet one.
+          if [ -z "$FI_POLICY" ]; then
+            echo "::error::no FI_POLICY secret. The committed example is an unrelated illustration and would produce an almost empty night that looks like a successful one."
+            exit 1
+          fi
+          printf '%s' "$FI_POLICY" > policy.json
+          echo "policy: from the repository secret"
+          python3 tools/describe_policy.py policy.json
+
+      - name: Fetch the window
+        env:
+          FI_POLICY: policy.json
+          EIS_COUNTRY: FI
+          LIMIT: ${{ inputs.limit }}
+          TARGETS: ${{ inputs.targets }}
+          # Five seconds was honest six times out of six from a runner on 2026-09-07. Six is
+          # that with a margin, and `fi_targets` re-asks with a long wait if it is ever wrong.
+          HILMA_SEARCH_PACE: "6"
+        run: |
+          # The window and the watch list go in ONE pass, deduplicated by the tool.
+          printf '%s' "$TARGETS" > targets.txt
+          echo "fetching the Finnish window $DAY .. $DAY_TO, plus $(grep -c . targets.txt || true) watched notice(s)"
+          rc=0
+          python3 eis_tool.py day "$DAY" --to "$DAY_TO" --out work \
+            ${LIMIT:+--limit $LIMIT} \
+            $([ -s targets.txt ] && echo "--targets targets.txt") \
+            --policy policy.json || rc=$?
+
+          # A SHORT DAY IS STILL A DAY, AND IT STILL GETS DELIVERED. `day` exits 1 when the
+          # window did not arrive whole -- a tender that would not download, a link the detail
+          # API disagreed with, a coverage control that failed -- and under `sh -e` that would
+          # skip the delivery below and throw away every tender that DID arrive. `day.json`
+          # records what went wrong and marks itself incomplete. Only a real error -- a bad
+          # country, an unparseable argument, an interpreter that died -- stops the run.
+          if [ "$rc" -eq 1 ]; then
+            echo "::warning::the window is short or unproven -- day.json names what happened, and it is delivered anyway"
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
+
+      # The fallback lane over the files no decoder could read, and it may never fail the run: a
+      # window whose scans stay unread is exactly as complete as it was before this step
+      # existed. On this route it usually has almost nothing to do -- 89% of Finnish tenders
+      # keep their documents behind a supplier account and never produce a queue at all.
+      - name: Read what no decoder could
+        if: ${{ always() }}
+        env:
+          EIS_COUNTRY: FI
+        run: python3 eis_tool.py scans --out work --date "$DAY_TO" || true
+
+      # The window is on the runner's disk and the runner is about to disappear. Everything
+      # after this line is what makes it a day somebody can read tomorrow -- and, because the
+      # comparison against the drive happens inside it, what makes "what moved" mean anything at
+      # all on the second night.
+      #
+      # Silent about where it writes: every coordinate is a secret and the script prints counts
+      # rather than paths.
+      - name: Deliver the window where the reader can reach it
+        if: ${{ success() && env.HAVE_GRAPH == 'true' }}
+        env:
+          HAVE_GRAPH: ${{ secrets.GRAPH_DRIVE_ID != '' }}
+          GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
+          GRAPH_DRIVE_ID: ${{ secrets.GRAPH_DRIVE_ID }}
+          GRAPH_DEST_ROOT: ${{ secrets.GRAPH_DEST_ROOT }}
+          EIS_COUNTRY: FI
+        run: python3 deliver_fi.py --out work --date "$DAY_TO"
+
+      # THE RUN IS NOT GREEN UNTIL THE DAY CAN PROVE ITSELF, and this is the last step so that a
+      # day which cannot is still delivered and still readable -- with `complete: false` on it,
+      # which is the honest state. A day that failed a hard control has either lost rows the
+      # index says exist or lost a notice TED published, and both mean somebody must look.
+      - name: Did the day arrive whole
+        if: ${{ always() }}
+        run: python3 tools/day_verdict.py "work/FI/$DAY_TO/day.json"

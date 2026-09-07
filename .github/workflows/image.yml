@@ -12,7 +12,7 @@ name: image
 # acceptance tender, and only then let it become `latest`.
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - Dockerfile
       - requirements.txt
