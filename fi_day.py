@@ -15,12 +15,22 @@ Finland runs at UTC+2 or +3, and notices are published as late as 18:36 UTC. A c
 "yesterday in Helsinki" and passes it to a UTC filter loses or duplicates the evening every time.
 This tool's dates are UTC dates, and a scheduler that wants Helsinki days must say so itself.
 
-THE GATE COSTS NOTHING HERE. In a country whose search returns only ids, deciding what is worth
-downloading means fetching a card per notice first. This index returns the title in four
-languages, the buyer, the CPV codes, the flags AND the buyer's own description -- a median of 964
-characters -- in the search itself. So the whole window is gated on what discovery already
-returned, and the first extra request of the run is made for a tender we have already decided to
-keep.
+WHAT THE GATE MAY AND MAY NOT DECIDE. The radar's job is to find every tender that could be ours
+and to hold everything known about it. Whether to bid is a person's decision, taken later, on the
+board. So the gate governs what is DOWNLOADED and never what is KNOWN: every notice in the window
+is recorded whole -- all 86 index fields -- whether it passed or not, and the detail notice is
+fetched for every tender Hilma runs itself regardless of the gate.
+
+AND IN FINLAND THE GATE IS NOT A COMPUTE BUDGET, WHICH IS THE THING THAT DOES NOT TRANSFER FROM
+LATVIA. There, documents are free and anonymous, so gating is only about time. Here 90% of tenders
+keep their documents on a platform that answers nobody who has not registered as a bidder on that
+specific tender. Downloading is therefore an act in a procurement rather than a request for a
+file, and the gate decides on how many Finnish tenders Echoo appears as an interested party. That
+is a business setting wearing the clothes of a performance setting.
+
+The gate costs no request either way: this index returns the title in four languages, the buyer,
+the CPV codes, the flags AND the buyer's own description -- a median of 964 characters -- in the
+search row itself.
 
 AWARDS ARE NOT FETCHED AND ARE NOT DISCARDED EITHER. An award notice looks exactly like a tender
 and they are 35% of the volume, so a run that treated them as opportunities would publish a month
@@ -107,6 +117,37 @@ def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_t
     # empty morning, and nothing to tell it from a public holiday.
     discovery_failed = bool(fi_targets.publishing_days(date_from, date_to)) and not targets
 
+    # EVERY NOTICE WHOSE FULL RECORD HILMA ACTUALLY HOLDS, FETCHED WHATEVER THE GATE SAYS.
+    #
+    # The radar's job is to find everything that could be ours and to hold everything known
+    # about it; deciding whether to bid is a person's. So the gate may govern what is
+    # DOWNLOADED -- in Finland that is not a compute budget but a count of tenders Echoo
+    # appears on as an interested bidder -- and it may not govern what is KNOWN.
+    #
+    # `tenderingInHilma` is the deterministic predicate for "the portal holds the whole
+    # thing": measured over the 11 815 contract notices of 1 Sep 2025 - 31 Aug 2026, it is
+    # true on exactly 10.0% of them, and those are the same notices whose documents sit on
+    # Hilma's own CDN. On the other 90% the notice is a pointer at a platform that will not
+    # answer without a registered bidder, and no request made here changes that.
+    #
+    # It costs about five detail calls a working day, on an endpoint measured honest at one
+    # second, and it buys the buyer's own qualification section -- which is the part that says
+    # whether Echoo could take part at all.
+    for target in targets:
+        if not target["record"].get("tenderingInHilma"):
+            continue
+        try:
+            document = fi_page.detail(target["procedure_id"], target["notice_id"])
+        except Exception as exc:
+            target["detail_error"] = str(exc)[:160]
+            continue
+        if document is None:
+            continue
+        public, unready = fi_page.catalogue(document)
+        target["requirements"] = document.get("requirements") or []
+        target["attachments_listed"] = len(public) + len(unready)
+        target["links_listed"] = len(document.get("links") or [])
+
     live = [t for t in targets if fi_page.is_live(t)]
     # Recorded without a request. See the module docstring.
     closed = [{"pid": t["pid"], "ref": t["ref"], "kind": t["kind"], "title": t["title"],
@@ -161,9 +202,12 @@ def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_t
                 # Named, never merely dropped. A tender nobody fetched and nobody mentioned reads
                 # exactly like a tender that does not exist -- and the list of what was cut is
                 # the fastest way to see a badly tuned word list.
-                gated.append({"pid": pid, "ref": target["ref"], "kind": target["kind"],
-                              "title": target["title"], "buyer": target["buyer"],
-                              "cpv": target["cpv"], "link": target["link"]})
+                # THE WHOLE RECORD, NOT A SUMMARY. A gated notice is still part of the day's
+                # picture and a person may overrule the gate the next morning; recording six
+                # fields of it would make that impossible to do without fetching the day again.
+                # The index row is 86 fields and costs nothing to keep, because it has already
+                # been paid for.
+                gated.append({k: v for k, v in target.items() if k != "record"})
                 continue
 
         try:
