@@ -1,12 +1,24 @@
 """Transport for Finland: one notice, and whatever of it can be read, into a home.
 
 FINLAND IS THE FIRST COUNTRY IN THIS FAMILY WITH A TENDER IT CANNOT READ AND MUST STILL PUBLISH.
-Eleven per cent of notices keep their documents on Hilma's own CDN, where they download
-anonymously and whole. Eighty-nine per cent sit on Cloudia and the other buyer platforms, behind
-a supplier account nobody in this pipeline has. Some have no documents at all. Every one of the
-three still produces a card, because the metadata is public in every case and the index carries
-the buyer's own description at list level -- a median of 964 characters, which is a real basis
-for a judgement even when it is the only basis there is.
+Measured over the 11 815 contract notices published 1 Sep 2025 - 31 Aug 2026: 10.1% keep their
+documents on Hilma's own CDN, where they download anonymously and whole, and 0.3% publish no
+document link at all. Everything else is on a buyer platform behind a supplier account. Every one
+of them still produces a card, because the metadata is public in every case and the index carries
+the buyer's own description at list level -- a median of 964 characters, which is a real basis for
+a judgement even when it is the only basis there is.
+
+AND THE SHUT 90% IS ALMOST ALL ONE DOOR, WHICH IS THE FACT THAT DECIDES WHAT TO BUILD.
+`tarjouspalvelu.fi` -- Cloudia, now Mercell -- holds 79.6% of the country's tender documents on
+its own; the next host holds 2.1% and the remaining 153 share under 10% between them. This is not
+Poland, where a single day scattered across 143 hosts. One supplier account moves a reader from
+10% of Finland's documents to 90%.
+
+That is deliberately NOT automated here, and the reason is arithmetic rather than principle. At
+11 815 notices a year an integration against that portal is a project: a credential in CI, a
+login to keep alive, and a platform's terms to read. At the four a month that survive the scope
+gate it is a person opening four pages. `documents_host` is carried on the card so that person
+knows which page.
 
 WHICH IS WHY `documents_available` TRAVELS WITH THE TENDER. A card judged on a description and a
 card judged on a specification are different claims, and nothing downstream can tell them apart
@@ -258,6 +270,9 @@ def fetch(row, out_root, with_text=True):
         # means it exists and is behind a supplier account; `none` means the buyer published no
         # documents at all. Without it a reader cannot tell a judgement from a guess.
         "documents_available": row.get("documents_available"),
+        # Which portal, not merely "somewhere else". A person reading the card has to open
+        # something, and 79.6% of the time it is one host they can hold an account for.
+        "documents_host": row.get("documents_host"),
         "title": row.get("title"),
         # THE DESCRIPTION IS EVIDENCE HERE, NOT DECORATION, and that is why it is in the index
         # and not only in `procurement.json`. Eighty-nine per cent of Finnish tenders keep
