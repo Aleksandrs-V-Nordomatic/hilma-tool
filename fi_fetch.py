@@ -14,11 +14,15 @@ its own; the next host holds 2.1% and the remaining 153 share under 10% between 
 Poland, where a single day scattered across 143 hosts. One supplier account moves a reader from
 10% of Finland's documents to 90%.
 
-That is deliberately NOT automated here, and the reason is arithmetic rather than principle. At
-11 815 notices a year an integration against that portal is a project: a credential in CI, a
-login to keep alive, and a platform's terms to read. At the four a month that survive the scope
-gate it is a person opening four pages. `documents_host` is carried on the card so that person
-knows which page.
+That is deliberately NOT automated here, and the reason is where the volume sits rather than how
+big it is. The recall gate -- title, all four languages, the buyer's description and the CPV
+codes -- keeps between 631 and 3 965 of the year's notices depending on how the policy is
+written, so the READING step judges hundreds a year with no document at all. Only what survives
+that judgement becomes a card, and a person opens a page for those. `documents_host` is carried
+so that person knows which page.
+
+The number to watch before buying an integration is not the portal's share. It is how often the
+reading step says it could not decide for want of a document.
 
 WHICH IS WHY `documents_available` TRAVELS WITH THE TENDER. A card judged on a description and a
 card judged on a specification are different claims, and nothing downstream can tell them apart

@@ -368,9 +368,20 @@ def documents_host(row):
     10% of the country's documents to 90%.
 
     The host is carried on the card because the card is read by a person who then has to open
-    something, and `external` sends them nowhere. It is also the number that decides whether an
-    integration is ever worth building: at 11 815 notices a year that host is an engineering
-    project, and at the four a month that survive the scope gate it is four clicks.
+    something, and `external` sends them nowhere.
+
+    AND THE VOLUME BEHIND IT WAS MEASURED WRONG ONCE, WHICH IS WORTH RECORDING. The first count
+    put "about four a month" behind that portal and concluded no integration was needed. That
+    number came from a regular expression over TITLES, which is not this family's gate: the gate
+    reads the title, all four languages of it, the buyer's DESCRIPTION and the CPV codes. Run
+    properly over the same year, the narrowest defensible recall policy keeps 631 notices, the
+    widest 3 965 -- 53 to 330 a month, against the 57 a year the title alone found. Poland taught
+    this exact lesson first: our terms appear zero times in Polish titles and 44 times in the
+    descriptions of the same days.
+
+    So the honest shape is that the reading step judges hundreds of tenders a year with no
+    document at all, and a person opens pages only for the few that become cards. That is why
+    `documents_available` is load-bearing rather than decorative.
     """
     url = (row.get("procurementDocumentsUrl") or "").strip()
     if not url:
