@@ -52,6 +52,19 @@ def verdict(day):
                      "measured window, so this is worth an eye" % (len(without),
                                                                    ", ".join(without[:5])))
 
+    reg = day.get("registration") or {}
+    for row in reg.get("overdue") or []:
+        ok = False
+        lines.append("  LOST %s -- the deadline %s passed while it waited for somebody to "
+                     "register" % (row.get("ref"), (row.get("deadline") or "")[:10]))
+    for row in reg.get("urgent") or []:
+        lines.append("  REGISTER NOW %-13s by %s on %s"
+                     % (row.get("ref"), (row.get("deadline") or "")[:10], row.get("portal")))
+    if reg.get("waiting"):
+        lines.append("  %d tender(s) waiting for somebody to register" % len(reg["waiting"]))
+    if reg.get("became_ready"):
+        lines.append("  %d tender(s) became readable this run" % len(reg["became_ready"]))
+
     proof = day.get("reconciliation")
     if proof is None:
         lines.append("  reconciliation: not run")

@@ -51,6 +51,7 @@ import fi_fetch
 import fi_page
 import fi_recon
 import fi_targets
+import fi_watch
 
 try:
     import changes as changes_mod
@@ -148,6 +149,16 @@ def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_t
         target["attachments_listed"] = len(public) + len(unready)
         target["links_listed"] = len(document.get("links") or [])
 
+    # THE REGISTRATION QUEUE, WHICH IS FINLAND'S AND NO OTHER COUNTRY'S. 90% of tenders keep
+    # their documents where nobody who has not registered as a bidder can read them, so a
+    # Finnish judgement is two judgements with a person's act between them. The queue holds
+    # every notice the day saw, remembers what was decided about it, and -- the part that
+    # matters -- says out loud when a deadline is about to pass on something still waiting for
+    # a person. See fi_watch.
+    queue = fi_watch.load(out_root)
+    fi_watch.observe(queue, targets, run_id=run_id)
+    became_ready, expired_waiting = fi_watch.refresh(queue, run_id=run_id)
+
     live = [t for t in targets if fi_page.is_live(t)]
     # Recorded without a request. See the module docstring.
     closed = [{"pid": t["pid"], "ref": t["ref"], "kind": t["kind"], "title": t["title"],
@@ -191,6 +202,30 @@ def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_t
         row["watched"] = True
         live.append(row)
         known.add(row["pid"])
+
+    # A TENDER WHOSE DOCUMENTS HAVE JUST BECOME READABLE IS FETCHED WHATEVER THE GATE SAYS, for
+    # the same reason a watched one is: somebody already decided it was worth the documents, and
+    # the gate only ever answered the question of whether to ask for them.
+    for pid in became_ready:
+        if pid in known:
+            for target in live:
+                if target["pid"] == pid:
+                    target["watched"] = True
+            continue
+        entry = queue["tenders"].get(pid) or {}
+        try:
+            row = fi_targets.one(entry.get("ref") or "")
+        except Exception:
+            row = None
+        if row is None:
+            failed.append({"ref": entry.get("ref"), "pid": pid, "kind": None, "watched": True,
+                           "reason": "its documents became readable but the index no longer "
+                                     "serves the notice -- look for the successor by "
+                                     "procedureId"})
+            continue
+        row["watched"] = True
+        live.append(row)
+        known.add(pid)
 
     for target in live:
         pid = target["pid"]
@@ -265,6 +300,14 @@ def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_t
     lost_window = [f for f in failed if not f.get("watched")]
     lost_watch = [f for f in failed if f.get("watched")]
 
+    for row in delivered:
+        entry = queue["tenders"].get(str(row["pid"]))
+        if entry is not None and entry["state"] not in fi_watch.TERMINAL:
+            fi_watch.note(entry, fi_watch.JUDGED,
+                          why="fetched and read on %s" % folder, run_id=run_id)
+    work = fi_watch.due(queue)
+    fi_watch.save(out_root, queue)
+
     proof = None
     if reconcile:
         proof = fi_recon.run(date_from, date_to, records=targets, count=index_count)
@@ -313,6 +356,19 @@ def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_t
         "unverified_links": bad_links,
         "tenders_without_deadline": no_deadline,
         "lost": failed,
+        # WHAT A PERSON HAS TO DO, AND WHAT WAS LOST BECAUSE THEY DID NOT. `overdue` is the one
+        # failure this pipeline can suffer with every step reporting success.
+        "registration": {
+            "counts": fi_watch.counts(queue),
+            "urgent": [{k: e.get(k) for k in ("ref", "title", "buyer", "deadline", "portal",
+                                              "documents_url")} for e in work["urgent"]],
+            "waiting": [{k: e.get(k) for k in ("ref", "title", "deadline", "portal")}
+                        for e in work["waiting"]],
+            "overdue": [{k: e.get(k) for k in ("ref", "title", "deadline")}
+                        for e in work["overdue"]],
+            "became_ready": became_ready,
+            "expired_while_waiting": expired_waiting,
+        },
         "tenders": delivered,
         # KEPT IN THE SHAPE THE OTHER COUNTRIES DELIVER, with exactly one shard, always present.
         # Latvia's day is four shards because its register refuses a third of the runner
@@ -411,6 +467,8 @@ def main(argv=None):
              "complete" if day["complete"] else "SHORT"))
     if day.get("reconciliation"):
         print("  %s" % fi_recon.line(day["reconciliation"]))
+    for line in fi_watch.report(fi_watch.load(args.out)):
+        print("  %s" % line)
     for row in changes["tenders"][:25]:
         print("  %-13s %-8s %-10s %-8s %s"
               % (row["ref"], row["status"], row["kind"], row["documents_available"],
