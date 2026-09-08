@@ -45,6 +45,7 @@ import sys
 import time
 
 import fi_page
+import fi_ted
 import net
 
 try:
@@ -242,6 +243,20 @@ def fetch(row, out_root, with_text=True):
                                       "is not the one it serves" % u.get("status"),
                             "files": []} for u in unready]
 
+    # THE SECOND PUBLIC SOURCE, FOR THE HALF OF THE COUNTRY THE EU ALSO PUBLISHES. Free, no
+    # account, and it carries what Hilma's 86 fields do not: the procedure, the award criteria
+    # with their weights, and whether the final phase is an electronic auction. On the measured
+    # tender it nearly doubled the description. It may never fail a fetch -- a tender is not lost
+    # because somebody else's service was down.
+    ted = None
+    if row.get("ted_id"):
+        try:
+            ted = fi_ted.collect(row["ted_id"])
+        except Exception as exc:
+            ted = {"ted_id": row["ted_id"], "error": str(exc)[:160]}
+    if ted:
+        _write(home, "ted.json", ted)
+
     procurement = {k: v for k, v in facts.items() if k != "record"}
     procurement["attachments_listed"] = len(attachments) + len(unready)
     # The whole notice as the portal serves it, so a later question about a field this tool does
@@ -277,6 +292,12 @@ def fetch(row, out_root, with_text=True):
         # Which portal, not merely "somewhere else". A person reading the card has to open
         # something, and 79.6% of the time it is one host they can hold an account for.
         "documents_host": row.get("documents_host"),
+        # What the EU's own copy of this notice adds. Absent on the national tier, which TED
+        # never sees -- that is the same one-directional fact the coverage check rests on.
+        "ted": ({k: ted.get(k) for k in ("ted_id", "procedure", "lots", "award_criteria",
+                                         "electronic_auction", "document_access", "chars",
+                                         "source")}
+                if ted and not ted.get("error") else None),
         "title": row.get("title"),
         # THE DESCRIPTION IS EVIDENCE HERE, NOT DECORATION, and that is why it is in the index
         # and not only in `procurement.json`. Eighty-nine per cent of Finnish tenders keep
