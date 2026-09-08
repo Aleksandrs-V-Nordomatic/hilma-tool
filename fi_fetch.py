@@ -44,6 +44,7 @@ import os
 import sys
 import time
 
+import fi_index
 import fi_page
 import fi_ted
 import net
@@ -352,6 +353,21 @@ def fetch(row, out_root, with_text=True):
                                       if e.get("markdown_path"))
         index["chars"] = normalized.get("chars", 0)
         _write(home, "index.json", index)          # rewritten with the text it now names
+
+    # THE MAP THE READING STEP OPENS INSTEAD OF THE FOLDER. Walked once, deterministically, so
+    # the pack's hundreds of thousands of characters become a handful of located quotes against
+    # the questions scope.md asks. It may not fail a fetch: a tender with no index is a tender
+    # read the slow way, not a tender lost.
+    evidence = None
+    if records:
+        try:
+            evidence = fi_index.build(home)
+            index["evidence"] = "evidence.json"
+            index["evidence_coverage"] = evidence["coverage"]
+            _write(home, "index.json", index)
+        except Exception as exc:
+            index["evidence_error"] = str(exc)[:160]
+            _write(home, "index.json", index)
 
     state = None
     if changes_mod is not None:
