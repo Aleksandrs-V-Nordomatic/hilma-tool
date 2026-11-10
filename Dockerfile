@@ -18,7 +18,8 @@ FROM ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e8
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONIOENCODING=utf-8
+    PYTHONIOENCODING=utf-8 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # curl is kept for parity with the other country tools' transport, git is for
 # actions/checkout, ca-certificates
@@ -41,6 +42,13 @@ COPY requirements.txt /tmp/requirements.txt
 RUN python3 -m pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt \
  && rm /tmp/requirements.txt
 
+# The browser that signs in to Tarjouspalvelu, and only that: `fi_cloudia` uses it for the door
+# and downloads with plain HTTP afterwards. The headless shell, not the full browser, because
+# nothing here is ever looked at. Installed into a fixed path, because a job container's HOME is
+# the runner's, not this image's, and Playwright looks for its browsers under HOME by default.
+RUN python3 -m playwright install --with-deps --only-shell chromium \
+ && rm -rf /var/lib/apt/lists/*
+
 # Fail the build rather than ship an image that cannot do the job. Each line here is
 # something a run depends on, and finding it missing on a runner costs a draw that reached
 # the portal — the scarcest thing this project has.
@@ -51,6 +59,7 @@ RUN set -e; \
     7z i > /dev/null; \
     tesseract --list-langs 2>&1 | grep -q '^fin$'; \
     tesseract --list-langs 2>&1 | grep -q '^swe$'; \
-    python3 -c "import fitz, docx, openpyxl, pptx, py7zr; print('converters import')"
+    python3 -c "import fitz, docx, openpyxl, pptx, py7zr; print('converters import')"; \
+    python3 -c "from playwright.sync_api import sync_playwright as s; p = s().start(); p.chromium.launch().close(); p.stop(); print('browser launches')"
 
 WORKDIR /work

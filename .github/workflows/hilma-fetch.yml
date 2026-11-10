@@ -39,7 +39,17 @@ jobs:
         env:
           EIS_COUNTRY: FI
           REFERENCE: ${{ inputs.reference }}
+          # The supplier account `fi_cloudia` reads Tarjouspalvelu's archives with. Without it a
+          # tender on that portal stays `external`, exactly as before.
+          CLOUDIA_USERNAME: ${{ secrets.CLOUDIA_USERNAME }}
+          CLOUDIA_PASSWORD: ${{ secrets.CLOUDIA_PASSWORD }}
         run: |
+          # THIS LOG IS PUBLIC. GitHub masks a secret's exact value; the address also travels
+          # URL-encoded through the sign-in, so that spelling is masked too.
+          if [ -n "$CLOUDIA_USERNAME" ]; then
+            echo "::add-mask::$CLOUDIA_USERNAME"
+            echo "::add-mask::$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["CLOUDIA_USERNAME"].strip()))')"
+          fi
           # A NOTICE THAT IS GONE IS USUALLY NOT A WITHDRAWAL, and the tool says so rather than
           # exiting on a bare "not found". A corrigendum supersedes its predecessor and the
           # index then DELETES the predecessor -- four for four in the measured sample, and

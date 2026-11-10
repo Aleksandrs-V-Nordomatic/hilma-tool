@@ -28,8 +28,8 @@ Hilma's own CDN and download anonymously; the rest are on Cloudia and the other 
 behind a supplier account, and some tenders have no documents at all. Every one of them still
 produces a card, because the metadata is public and the index carries the buyer's own description
 at list level. **This is the first country in the family with a tender it cannot read and must
-still publish**, which is why `documents_available` — `hilma` / `external` / `none` — travels
-with every tender all the way to the card. A card judged on a description and a card judged on a
+still publish**, which is why `documents_available` — `hilma` / `portal` / `external` / `none` —
+travels with every tender all the way to the card. A card judged on a description and a card judged on a
 specification are different claims, and nothing downstream can tell them apart otherwise.
 
 **The day-to-day is not where the money is.** Framework call-offs are exempt from the ex-post
@@ -81,6 +81,31 @@ information obtained through the Service's open interfaces for the production of
 services". The Interfaces page describes the intended shape as taking notices into your own
 service, enriching them there and serving your own users from your own system, and asks that the
 interface be used sparingly.
+
+## The supplier account
+
+`tarjouspalvelu.fi` (Cloudia, now Mercell) holds 79.6% of Finland's tender documents, and one
+supplier account opens all of them. `fi_cloudia.py` signs in once per run with a headless browser,
+takes the session's cookies, and downloads each tender's archive with plain HTTP:
+
+```
+GET https://tarjouspalvelu.fi/Zip/TarjousPyynnonLiitteet/{tpId}     # tpId = id= of the documents link
+```
+
+- **A tender's page is never opened.** Opening one creates a draft response under the company's
+  name. The browser sees the front page and the sign-in pages, nothing else.
+- **Only tenders somebody wants**: past the recall gate, on the watch list, or fetched by hand.
+  The same rule as for Hilma's own documents.
+- **The archive is rebuilt on every request**, so its digest changes while its files do not.
+  Each member is its own record, keyed by its path in the archive, with its own sha256; the
+  archive's digest is not recorded.
+- **A tender read this way is `documents_available: portal`**, never `hilma`, so the flag still
+  says where the specification came from. One the portal would not give stays `external`, with
+  the reason in `index.json` under `portal`.
+- **The portal step logs counts only** — no tender number, title or account — because the
+  repository and its logs are public. The account arrives in the `CLOUDIA_USERNAME` / `CLOUDIA_PASSWORD` secrets.
+
+`python3 fi_cloudia.py --check` signs in and downloads nothing.
 
 ## Five ways this route lies quietly
 

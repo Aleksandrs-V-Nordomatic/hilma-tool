@@ -14,15 +14,16 @@ its own; the next host holds 2.1% and the remaining 153 share under 10% between 
 Poland, where a single day scattered across 143 hosts. One supplier account moves a reader from
 10% of Finland's documents to 90%.
 
-That is deliberately NOT automated here, and the reason is where the volume sits rather than how
-big it is. The recall gate -- title, all four languages, the buyer's description and the CPV
-codes -- keeps between 631 and 3 965 of the year's notices depending on how the policy is
-written, so the READING step judges hundreds a year with no document at all. Only what survives
-that judgement becomes a card, and a person opens a page for those. `documents_host` is carried
-so that person knows which page.
+So that door is opened, under the company's supplier account, by `fi_cloudia`: for a tender
+that passed the recall gate or that a person is watching, and whose documents are on that one
+host, the portal's archive is downloaded and its files become the home's documents exactly as
+Hilma's would. Such a tender is `documents_available: portal`, not `hilma` -- the flag says where
+the specification came from, and `hilma` would hide how much of the reading this route carries.
+A tender on any other host, or one the portal step could not read, stays `external` and is
+judged on the notice, with `documents_host` telling a person which page to open.
 
-The number to watch before buying an integration is not the portal's share. It is how often the
-reading step says it could not decide for want of a document.
+The number to watch is how often the reading step still says it could not decide for want of a
+document, and on which hosts.
 
 WHICH IS WHY `documents_available` TRAVELS WITH THE TENDER. A card judged on a description and a
 card judged on a specification are different claims, and nothing downstream can tell them apart
@@ -237,6 +238,18 @@ def fetch(row, out_root, with_text=True):
     records, withheld, total = ([], [], 0)
     if attachments:
         records, withheld, total = store(home, attachments)
+
+    # THE DOCUMENTS HILMA DOES NOT HOLD, FROM THE ONE PORTAL THAT HOLDS 80% OF THEM. Only reached
+    # for a tender somebody already wants -- `fi_day` never fetches a gated notice -- and it
+    # never fails a fetch: a tender the portal would not give stays `external`, judged on the
+    # notice as before, with the reason on its index.
+    available = row.get("documents_available")
+    portal = None
+    if available == "external" and not records:
+        import fi_cloudia
+        portal = fi_cloudia.fetch_into(home, row)
+        if portal and portal["status"] == "read":
+            records, total, available = portal["records"], portal["bytes"], "portal"
     # An attachment the portal lists but is not yet serving is withheld for a different reason
     # from one whose download failed, and both belong on the card.
     withheld = withheld + [{"id": u["id"], "title": u["name"], "download": u["download"],
@@ -286,10 +299,14 @@ def fetch(row, out_root, with_text=True):
         "link": row.get("link"),
         "link_verified": verified,
         "documents_link": row.get("documents_url"),
-        # THE FLAG THAT MAKES A CARD HONEST. `hilma` means the specification was read; `external`
-        # means it exists and is behind a supplier account; `none` means the buyer published no
-        # documents at all. Without it a reader cannot tell a judgement from a guess.
-        "documents_available": row.get("documents_available"),
+        # THE FLAG THAT MAKES A CARD HONEST. `hilma` means the specification was read from
+        # Hilma; `portal` that it was read from the supplier portal under our account; `external`
+        # that it exists behind an account we did not get through; `none` that the buyer
+        # published no documents at all. Without it a reader cannot tell a judgement from a guess.
+        "documents_available": available,
+        # What the portal step did, and why it did not read, when it did not.
+        "portal": ({k: portal[k] for k in ("host", "status", "reason", "files", "bytes")}
+                   if portal else None),
         # Which portal, not merely "somewhere else". A person reading the card has to open
         # something, and 79.6% of the time it is one host they can hold an account for.
         "documents_host": row.get("documents_host"),
@@ -384,7 +401,7 @@ def fetch(row, out_root, with_text=True):
     return {"pid": pid, "ref": row.get("ref"), "kind": row.get("kind"), "home": home,
             "documents": len(records), "catalogued": len(attachments) + len(unready),
             "withheld": len(withheld), "uncatalogued": 0,
-            "documents_available": row.get("documents_available"),
+            "documents_available": available,
             "link_verified": verified,
             "bytes": total, "index": index, "state": state,
             "title": row.get("title"), "buyer": row.get("buyer"),

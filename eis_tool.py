@@ -295,6 +295,9 @@ def main(argv=None):
               % (done["ref"], done["pid"], done["documents"], done["catalogued"],
                  done["withheld"], done["bytes"] / 1048576.0, done["documents_available"],
                  done["home"]))
+        portal = (done.get("index") or {}).get("portal")
+        if portal and portal.get("status") != "read":
+            print("  tarjouspalvelu: %s" % portal.get("reason"))
         print("  deliver it with: python3 deliver_fi.py --out %s --date %s" % (args.out, folder))
         return 0
 
@@ -334,6 +337,9 @@ def main(argv=None):
                  day["counts"]["documents"], out))
         if day.get("reconciliation"):
             print("  %s" % fi_recon.line(day["reconciliation"]))
+        import fi_cloudia
+        if fi_cloudia.summary():               # counts only: this log is public
+            print("  %s" % fi_cloudia.summary())
         # NAMED, NOT COUNTED. "5 of 41" is also what a heavily gated day looks like, so a short
         # day that only reported a number would be indistinguishable from a normal one.
         for row in day.get("lost", []):
