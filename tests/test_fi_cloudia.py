@@ -220,6 +220,7 @@ class IntoAHome(Reset):
         done = fi_fetch.fetch(self.row(), self.home, with_text=False)
         self.assertEqual(done["documents_available"], "portal")
         self.assertEqual(done["documents"], 1)
+        self.assertEqual(done["catalogued"], 1)
         with open(os.path.join(self.home, "tenders", "990001", "index.json"), encoding="utf-8") as fh:
             index = json.load(fh)
         self.assertEqual(index["documents_available"], "portal")

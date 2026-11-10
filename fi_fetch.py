@@ -250,6 +250,9 @@ def fetch(row, out_root, with_text=True):
         portal = fi_cloudia.fetch_into(home, row)
         if portal and portal["status"] == "read":
             records, total, available = portal["records"], portal["bytes"], "portal"
+    # What a portal listed. For the archive that is what it held, so a portal-read tender does
+    # not report eight documents out of none.
+    listed = len(attachments) + len(unready) + (len(records) if available == "portal" else 0)
     # An attachment the portal lists but is not yet serving is withheld for a different reason
     # from one whose download failed, and both belong on the card.
     withheld = withheld + [{"id": u["id"], "title": u["name"], "download": u["download"],
@@ -272,7 +275,7 @@ def fetch(row, out_root, with_text=True):
         _write(home, "ted.json", ted)
 
     procurement = {k: v for k, v in facts.items() if k != "record"}
-    procurement["attachments_listed"] = len(attachments) + len(unready)
+    procurement["attachments_listed"] = listed
     # The whole notice as the portal serves it, so a later question about a field this tool does
     # not read yet can be answered from the disk instead of from the portal again.
     if document is not None:
@@ -344,7 +347,7 @@ def fetch(row, out_root, with_text=True):
         "ted_id": row.get("ted_id"),
         # What the portal listed and what it served, kept apart on purpose: a gap between them is
         # a fact about the delivery, not a rounding error.
-        "catalogued_documents": len(attachments) + len(unready),
+        "catalogued_documents": listed,
         "withheld_documents": len(withheld),
         "documents": [{
             "id": r["id"],
@@ -399,7 +402,7 @@ def fetch(row, out_root, with_text=True):
         _write(home, "state.json", state)
 
     return {"pid": pid, "ref": row.get("ref"), "kind": row.get("kind"), "home": home,
-            "documents": len(records), "catalogued": len(attachments) + len(unready),
+            "documents": len(records), "catalogued": listed,
             "withheld": len(withheld), "uncatalogued": 0,
             "documents_available": available,
             "link_verified": verified,

@@ -152,7 +152,17 @@ jobs:
           # Five seconds was honest six times out of six from a runner on 2026-09-07. Six is
           # that with a margin, and `fi_targets` re-asks with a long wait if it is ever wrong.
           HILMA_SEARCH_PACE: "6"
+          # The supplier account `fi_cloudia` reads Tarjouspalvelu's archives with, for the
+          # tenders past the gate and the watched ones only. Proved on one tender through
+          # hilma-fetch on 2026-11-10 before it was given to the night.
+          CLOUDIA_USERNAME: ${{ secrets.CLOUDIA_USERNAME }}
+          CLOUDIA_PASSWORD: ${{ secrets.CLOUDIA_PASSWORD }}
         run: |
+          # THIS LOG IS PUBLIC: the address is masked as written and as URL-encoded.
+          if [ -n "$CLOUDIA_USERNAME" ]; then
+            echo "::add-mask::$CLOUDIA_USERNAME"
+            echo "::add-mask::$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["CLOUDIA_USERNAME"].strip()))')"
+          fi
           # The window and the watch list go in ONE pass, deduplicated by the tool.
           printf '%s' "$TARGETS" > targets.txt
           echo "fetching the Finnish window $DAY .. $DAY_TO, plus $(grep -c . targets.txt || true) watched notice(s)"
