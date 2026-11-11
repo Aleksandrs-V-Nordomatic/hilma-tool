@@ -170,6 +170,7 @@ jobs:
           python3 eis_tool.py day "$DAY" --to "$DAY_TO" --out work \
             ${LIMIT:+--limit $LIMIT} \
             $([ -s targets.txt ] && echo "--targets targets.txt") \
+            --tarjouspalvelu \
             --policy policy.json || rc=$?
 
           # A SHORT DAY IS STILL A DAY, AND IT STILL GETS DELIVERED. `day` exits 1 when the
