@@ -67,7 +67,10 @@ import deliver_graph as graph
 # exactly as the portal served it, and on a route where 89% of specifications are shut it is
 # the deepest thing a later question can be answered from -- a question asked after the
 # runner's disk has gone, which is every question.
-FLAT = ("procurement.json", "manifest.json", "notice.json")
+# `evidence.json` travels because `index.json` points at it: the located quotes are what the
+# reading step is told to prefer, and a pointer to a file that stayed on the runner is worse
+# than no pointer.
+FLAT = ("procurement.json", "manifest.json", "notice.json", "evidence.json")
 NORMALIZED = "normalized/manifest_normalized.json"
 
 

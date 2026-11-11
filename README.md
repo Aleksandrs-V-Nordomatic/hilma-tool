@@ -234,6 +234,7 @@ work/FI/
     notice.json        the eForms notice as the portal served it
     manifest.json      sha256 per attachment, and the ones the portal would not serve
     doc/<digest>.md    one file per document, named by the digest of its ORIGINAL bytes
+    doc/notice.md      the notice itself, so a card judged on it can quote it
     index.json         written LAST — its existence proves the home is whole
     originals/         the downloaded files. Never delivered; the index carries their addresses
     state.json  runs/<date>.json
@@ -250,6 +251,17 @@ because the window is how a missed night is caught up. A single hand fetch write
 
 `index.json` carries the buyer's **description**, and that is deliberate: for the 89% of tenders
 whose specification is shut, it is the whole of what a judgement can be made on.
+
+**The notice is also a document: `doc/notice.md`, in every home.** A card's quote is verified
+against the home's `doc/*.md` and nothing else, so a tender judged on its notice alone could
+never be carded while the description lived only in `index.json`. The file holds the title,
+buyer, dates, notice kind, procedure, CPV, estimated value and link as labelled lines; then the description
+**exactly as `index.json` holds it**, so a quote taken from either is found in it; then, for the
+EU tier, TED's descriptions and award criteria as TED serves them — the longer text `ted.json`
+holds, which is not delivered. `index.json` names it as `notice_document`, and `evidence.json` is
+built over it as over any other document, so a notice-only tender gets located quotes too. The
+file is rendered by `fi_page`, the parser whose version stamps the fingerprint, so a home already
+on the drive is refreshed once the next time it is read rather than reported as amended.
 
 ## Running it
 

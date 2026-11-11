@@ -457,6 +457,49 @@ def notice(row, detail=None, kind=None):
     }
 
 
+NOTICE_DOCUMENT = "doc/notice.md"
+
+
+def notice_markdown(facts, ted=None):
+    """The notice itself as a document in the home, so a card judged on it can quote it.
+
+    A card's quote is verified against the home's documents and nothing else, and on this route
+    most homes have none: the specification is behind a supplier account, and the buyer's own
+    description -- the whole basis of the judgement -- lived only in `index.json`. So a tender
+    judged on its notice could never be carded, however good the notice. Written here, every home
+    carries the text it can be judged on as a file a quote is located in.
+
+    THE DESCRIPTION IS WRITTEN EXACTLY AS THE INDEX HOLDS IT, all languages in one block, so a
+    quote taken from `index.json` is found here too. TED's descriptions and award criteria follow
+    as TED serves them; they are the EU tier's longer text and reached no reader before this.
+    The labels are ours and in English; everything under them is the buyer's.
+    """
+    lines = ["# %s" % (facts.get("title") or facts.get("ref") or "Notice"), ""]
+    meta = [("Notice", facts.get("ref")), ("Source", facts.get("source") or "Hilma"),
+            ("Buyer", facts.get("buyer")), ("Published", facts.get("published")),
+            ("Deadline", facts.get("deadline")),
+            ("Notice kind", facts.get("kind")), ("Procedure", facts.get("procedure")),
+            ("CPV", " ".join(facts.get("cpv") or []) or None),
+            ("Estimated value", facts.get("value")), ("Link", facts.get("link"))]
+    lines += ["- %s: %s" % (label, value) for label, value in meta if value not in (None, "")]
+    titles = (facts.get("titles") or "").strip()
+    if titles and titles != (facts.get("title") or "").strip():
+        lines += ["", "## Titles", "", titles]
+    lines += ["", "## Description", "",
+              (facts.get("description") or "").strip() or "(the notice carries no description)"]
+    if ted and not ted.get("error"):
+        lines += ["", "## TED %s" % (ted.get("ted_id") or "")]
+        for text in ted.get("descriptions") or []:
+            lines += ["", text.strip()]
+        criteria = ted.get("award_criteria") or []
+        if criteria:
+            lines += ["", "### Award criteria", ""]
+            for c in criteria:
+                head = " ".join(x for x in (c.get("type"), c.get("weight")) if x)
+                lines.append("- %s%s" % (head + ": " if head else "", (c.get("text") or "").strip()))
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def catalogue(detail):
     """Every document the portal lists for a notice, the ones it will serve and the rest apart.
 

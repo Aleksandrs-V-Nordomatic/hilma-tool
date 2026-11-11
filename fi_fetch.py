@@ -368,8 +368,13 @@ def fetch(row, out_root, with_text=True):
             "catalogued": True,
             "download": r["download"],
         } for r in records],
+        # The notice as a document a quote can be located in -- see `fi_page.notice_markdown`.
+        "notice_document": fi_page.NOTICE_DOCUMENT,
         "written_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    os.makedirs(os.path.join(home, "doc"), exist_ok=True)
+    with open(os.path.join(home, fi_page.NOTICE_DOCUMENT), "w", encoding="utf-8") as fh:
+        fh.write(fi_page.notice_markdown(dict(row, source=index["source"]), ted))
     _write(home, "index.json", index)
 
     normalized = (extract(home) if (with_text and records)
@@ -384,17 +389,17 @@ def fetch(row, out_root, with_text=True):
     # THE MAP THE READING STEP OPENS INSTEAD OF THE FOLDER. Walked once, deterministically, so
     # the pack's hundreds of thousands of characters become a handful of located quotes against
     # the questions scope.md asks. It may not fail a fetch: a tender with no index is a tender
-    # read the slow way, not a tender lost.
+    # read the slow way, not a tender lost. Built for a notice-only tender too: the notice is a
+    # document now, and the located quote is what a card needs whichever document it is from.
     evidence = None
-    if records:
-        try:
-            evidence = fi_index.build(home)
-            index["evidence"] = "evidence.json"
-            index["evidence_coverage"] = evidence["coverage"]
-            _write(home, "index.json", index)
-        except Exception as exc:
-            index["evidence_error"] = str(exc)[:160]
-            _write(home, "index.json", index)
+    try:
+        evidence = fi_index.build(home)
+        index["evidence"] = "evidence.json"
+        index["evidence_coverage"] = evidence["coverage"]
+        _write(home, "index.json", index)
+    except Exception as exc:
+        index["evidence_error"] = str(exc)[:160]
+        _write(home, "index.json", index)
 
     state = None
     if changes_mod is not None:
