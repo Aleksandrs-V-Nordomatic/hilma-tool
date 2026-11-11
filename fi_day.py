@@ -177,6 +177,33 @@ def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_t
     moves, delivered, failed, gated = [], [], [], []
 
     known = {t["pid"] for t in live}
+
+    # A WATCHED TENDER FROM TARJOUSPALVELU'S OWN LIST has no Hilma notice to ask for, so it is
+    # read again from that list. One the list no longer holds is a hole in the watch, as a gone
+    # Hilma notice is.
+    portal_watch = [str(r).strip() for r in (watch or [])
+                    if str(r).strip().upper().startswith("TP-")]
+    watch = [r for r in (watch or []) if str(r).strip() not in portal_watch]
+    if portal_watch:
+        import fi_tp_list
+        wanted = [r.split("-", 1)[1] for r in portal_watch]
+        try:
+            again = fi_tp_list.find(wanted)
+        except Exception as exc:
+            again, why = {}, "the Tarjouspalvelu list did not answer: %s" % str(exc)[:150]
+        else:
+            why = "Tarjouspalvelu's list no longer holds it"
+        for reference, tp in zip(portal_watch, wanted):
+            row = again.get(tp)
+            if row is None:
+                failed.append({"ref": reference, "pid": "tp-%s" % tp, "kind": None,
+                               "watched": True, "reason": why})
+                continue
+            row["watched"] = True
+            if row["pid"] not in known:
+                live.append(row)
+                known.add(row["pid"])
+
     for reference in (watch or []):
         try:
             row = fi_targets.one(reference)

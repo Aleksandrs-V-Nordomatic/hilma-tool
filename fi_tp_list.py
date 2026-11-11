@@ -179,6 +179,27 @@ def window(date_from, date_to, fetch=None, max_pages=MAX_PAGES):
     return report, kept
 
 
+def find(tp_ids, fetch=None, max_pages=MAX_PAGES):
+    """The rows for tenders somebody is watching, by tpId, walking back until all are found.
+
+    A watched `TP-` tender has no Hilma notice to ask for, and its page must not be opened, so
+    the list is the only place its facts can be read again. Returns `{tp_id: row}` for those
+    found; one missing from twenty pages -- several months -- has left the list.
+    """
+    fetch = fetch or page
+    wanted, found = {str(t) for t in tp_ids}, {}
+    for number in range(1, max_pages + 1):
+        if not wanted - set(found):
+            break
+        items = parse(fetch(number))
+        if not items:
+            break
+        for item in items:
+            if item["tp_id"] in wanted and item["tp_id"] not in found:
+                found[item["tp_id"]] = notice(item)
+    return found
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Tarjouspalvelu's own competitions for a window.")
     ap.add_argument("--date", required=True, help="YYYY-MM-DD, UTC; the first day")

@@ -116,6 +116,17 @@ class TheDay(DayHarness):
         self.assertIn("connection reset", day["tarjouspalvelu_list"]["error"])
         self.assertTrue(day["complete"])
 
+    def test_a_watched_portal_tender_is_read_again_from_the_list(self):
+        self.serve([row("EF-1")])
+        find = fi_tp_list.find
+        self.addCleanup(setattr, fi_tp_list, "find", find)
+        fi_tp_list.find = lambda ids: find(ids, fetch=lambda n: PAGE if n == 1 else "")
+        day, changes = self.run_day("2026-11-10", watch=["TP-700005", "TP-799999"])
+        self.assertIn("TP-700005", self.fetched)
+        holes = [f["ref"] for f in day["lost"]]
+        self.assertEqual(holes, ["TP-799999"])
+        self.assertTrue(day["complete"], "a hole in the watch is not a short window")
+
     def test_without_the_flag_the_list_is_never_asked(self):
         self.serve([row("EF-1")])
         fi_tp_list.window = lambda a, b: self.fail("the list was asked")
