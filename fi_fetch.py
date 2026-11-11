@@ -229,7 +229,13 @@ def fetch(row, out_root, with_text=True):
     # THE FACTS AND THE CATALOGUE IN ONE CALL, through the seam every country tool answers. It
     # also performs the link check: the detail address is the one thing on this portal that
     # answers 404 for something that is not there, so asking it does two jobs.
-    facts = fi_page.collect(row.get("record") or {}, kind=row.get("kind"))
+    if row.get("source") == "Tarjouspalvelu":
+        # A tender only the portal's own list carries: Hilma has no notice to ask, so the row
+        # is the whole of the facts and there is no link to verify against a detail API.
+        facts = {k: v for k, v in row.items() if k != "record"}
+        facts.update(link_verified=None, documents=[], withheld_documents=[], detail=None)
+    else:
+        facts = fi_page.collect(row.get("record") or {}, kind=row.get("kind"))
     document = facts.pop("detail", None)
     verified = facts.get("link_verified")
     attachments = facts.pop("documents", []) or []
@@ -298,7 +304,8 @@ def fetch(row, out_root, with_text=True):
         "ref": row.get("ref"),
         "country": "FI",
         "kind": row.get("kind"),
-        "source": "Hilma",
+        "source": row.get("source") or "Hilma",
+        "notice_type": row.get("notice_type"),
         "link": row.get("link"),
         "link_verified": verified,
         "documents_link": row.get("documents_url"),

@@ -107,6 +107,13 @@ GET https://tarjouspalvelu.fi/Zip/TarjousPyynnonLiitteet/{tpId}     # tpId = id=
 
 `python3 fi_cloudia.py --check` signs in and downloads nothing.
 
+**The small procurements Hilma never carries** come from the portal's own public list
+(`fi_tp_list.py`, no account): a row whose type has no eForms code is published nowhere else, and
+the competitions among them become `tenders/tp-<tpId>/` with `ref` `TP-<tpId>` and
+`source: Tarjouspalvelu`. About 64 a week. They are added after the window has been proved
+against Hilma, pass the same gate, and get their documents through the step above. `day
+--tarjouspalvelu` turns this on; `day.json` reports it under `tarjouspalvelu_list`.
+
 ## Five ways this route lies quietly
 
 Every one of these returns HTTP 200.

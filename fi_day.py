@@ -92,7 +92,7 @@ def _future(when):
 
 
 def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_to=None,
-        reconcile=True, with_text=True):
+        reconcile=True, with_text=True, tarjouspalvelu=False):
     """Fetch the window's live notices into homes and write the day's two files.
 
     `watch` is the notice numbers somebody is still deciding about -- the cards whose decision has
@@ -227,6 +227,26 @@ def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_t
         live.append(row)
         known.add(pid)
 
+    # THE SMALL PROCUREMENTS HILMA NEVER SEES. Added after the window has been proved against
+    # Hilma's own count, so they can never make that proof pass or fail; gated like any other
+    # tender; and a list that does not answer costs the day nothing but its own line. See
+    # fi_tp_list.
+    portal_list = None
+    if tarjouspalvelu:
+        import fi_cloudia
+        import fi_tp_list
+        in_hilma = {fi_cloudia._tender(t) for t in targets} - {None}
+        try:
+            portal_list, found = fi_tp_list.window(date_from, date_to)
+        except Exception as exc:
+            portal_list, found = {"error": "%s: %s" % (type(exc).__name__, str(exc)[:160])}, []
+        for row in found:
+            if row["tp_id"] in in_hilma or row["pid"] in known:
+                portal_list["kept"] = portal_list.get("kept", 0) - 1
+                continue
+            live.append(row)
+            known.add(row["pid"])
+
     for target in live:
         pid = target["pid"]
         home = os.path.join(out_root, "tenders", pid)
@@ -353,6 +373,9 @@ def run(date, out_root, limit=None, run_id=None, policy=None, watch=None, date_t
                        documents=sum(t["documents"] for t in delivered),
                        bytes=sum(t["bytes"] for t in delivered)),
         "reconciliation": proof,
+        # What the portal's own list added, apart from the window Hilma proved. None when the
+        # list was not asked.
+        "tarjouspalvelu_list": portal_list,
         "unverified_links": bad_links,
         "tenders_without_deadline": no_deadline,
         "lost": failed,

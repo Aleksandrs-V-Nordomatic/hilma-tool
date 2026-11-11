@@ -88,7 +88,14 @@ def tp_id(url):
 
 def applies(row):
     """Whether this tender's documents are on Tarjouspalvelu and can be asked for by number."""
-    return row.get("documents_host") == HOST and tp_id(row.get("documents_url")) is not None
+    return row.get("documents_host") == HOST and _tender(row) is not None
+
+
+def _tender(row):
+    """The tpId a row carries itself (a tender found on the portal's own list), or the one in
+    the documents address Hilma gives."""
+    own = str(row.get("tp_id") or "").strip()
+    return own if own.isdigit() else tp_id(row.get("documents_url"))
 
 
 def _account():
@@ -324,7 +331,7 @@ def fetch_into(home, row, get=None):
     if _account() is None:
         COUNTS["skipped"] += 1
         return dict(out, status="skipped", reason="no supplier account is configured for this run")
-    tp = tp_id(row.get("documents_url"))
+    tp = _tender(row)
     try:
         cookie, agent = session()
         data, reason, signed_out = download(tp, cookie, agent, get=get)

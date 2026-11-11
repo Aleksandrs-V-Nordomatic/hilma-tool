@@ -195,6 +195,9 @@ def main(argv=None):
                         "them, one per line, or the numbers themselves separated by commas")
     p.add_argument("--no-reconcile", action="store_true",
                    help="skip the coverage controls. For a trial run, never for a night")
+    p.add_argument("--tarjouspalvelu", action="store_true",
+                   help="also read Tarjouspalvelu's own list for the competitions Hilma never "
+                        "carries; they become tp-<tpId> homes")
     country.add_argument(p)
 
     p = sub.add_parser("probe", help="will this address be told the truth by the search index")
@@ -329,7 +332,8 @@ def main(argv=None):
         out = os.path.join(args.out, code)
         day, _ = fi_day.run(args.date, out, args.limit, policy=args.policy,
                             watch=read_targets(args.targets), date_to=args.to,
-                            reconcile=not args.no_reconcile)
+                            reconcile=not args.no_reconcile,
+                            tarjouspalvelu=args.tarjouspalvelu)
         print("%s %s..%s: %d/%d delivered, %d gated, %d closed, %d document(s) -> %s"
               % (code, day["window"]["from"], day["window"]["to"],
                  day["coverage"]["delivered"], day["coverage"]["targets"],
@@ -337,6 +341,10 @@ def main(argv=None):
                  day["counts"]["documents"], out))
         if day.get("reconciliation"):
             print("  %s" % fi_recon.line(day["reconciliation"]))
+        if day.get("tarjouspalvelu_list") is not None:     # counts only: this log is public
+            listed = day["tarjouspalvelu_list"]
+            print("  tarjouspalvelu list: %s" % (listed.get("error") or "%d in the window, %d only there"
+                                                % (listed.get("in_window", 0), listed.get("kept", 0))))
         import fi_cloudia
         if fi_cloudia.summary():               # counts only: this log is public
             print("  %s" % fi_cloudia.summary())
