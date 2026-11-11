@@ -69,8 +69,9 @@ import deliver_graph as graph
 # runner's disk has gone, which is every question.
 # `evidence.json` travels because `index.json` points at it: the located quotes are what the
 # reading step is told to prefer, and a pointer to a file that stayed on the runner is worse
-# than no pointer.
-FLAT = ("procurement.json", "manifest.json", "notice.json", "evidence.json")
+# than no pointer. `ted.json` travels because the reading step is told to open it for the EU
+# tier, and the award criteria's weights are only summarised in the index.
+FLAT = ("procurement.json", "manifest.json", "notice.json", "evidence.json", "ted.json")
 NORMALIZED = "normalized/manifest_normalized.json"
 
 
