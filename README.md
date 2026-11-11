@@ -179,7 +179,7 @@ Three controls, two of which fail the run. `day.json` carries the whole report a
 | | control | |
 |---|---|---|
 | 1 | rows held == the index's own `@odata.count` | **hard** |
-| 2 | every TED notice for the day found in Hilma by `tedPublicationId` | **hard** |
+| 2 | every TED notice for the day whose lead buyer is Finnish found in Hilma, by `tedPublicationId` or a corrigendum's `previousTedPublicationId` | **hard** |
 | 3 | the portal's live-procurement counter within 5% of ours | warn |
 
 **Never compare daily totals with TED.** Hilma leads TED across weekends — 2026-08-30, a Sunday,

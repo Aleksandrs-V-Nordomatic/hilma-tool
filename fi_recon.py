@@ -62,14 +62,20 @@ def ted_notices(date, timeout=60):
 
     `totalNoticeCount` is TED's own total and is collected against, for the same reason
     `@odata.count` is: a paging bug that returns fewer rows is invisible without it.
+
+    `buyer-country=FIN` matches a notice with a Finnish buyer ANYWHERE among its buyers, and the
+    EU institutions buy jointly: 778712-2026 named 48 of them, the Helsinki agency among them,
+    and was sent to TED by the Commission. Hilma never carries such a notice, and nothing obliges
+    it to. So the notices whose LEAD buyer -- the first listed -- is not Finnish are returned
+    apart, and the control does not ask Hilma for them.
     """
     wanted = date.replace("-", "")
-    numbers, page, total = [], 1, None
+    numbers, led_abroad, page, total = [], [], 1, None
     while True:
         payload = json.dumps({
             "query": "publication-date=%s AND buyer-country=FIN" % wanted,
             "limit": TED_PAGE, "page": page,
-            "fields": ["publication-number", "publication-date", "notice-type"],
+            "fields": ["publication-number", "publication-date", "notice-type", "buyer-country"],
         }).encode("utf-8")
         request = urllib.request.Request(
             TED_SEARCH, data=payload,
@@ -78,11 +84,16 @@ def ted_notices(date, timeout=60):
                                parse=lambda raw: json.loads(raw.decode("utf-8")))
         total = body.get("totalNoticeCount") if total is None else total
         rows = body.get("notices") or []
-        numbers.extend(str(r.get("publication-number")) for r in rows if r.get("publication-number"))
+        for r in rows:
+            if r.get("publication-number"):
+                numbers.append(str(r["publication-number"]))
+                countries = r.get("buyer-country") or []
+                if countries and countries[0] != "FIN":
+                    led_abroad.append(str(r["publication-number"]))
         if len(numbers) >= (total or 0) or not rows:
             break
         page += 1
-    return total, numbers
+    return total, numbers, led_abroad
 
 
 def in_hilma(numbers, date):
@@ -101,10 +112,19 @@ def in_hilma(numbers, date):
     found = set()
     for start in range(0, len(numbers), TED_BATCH):
         batch = numbers[start:start + TED_BATCH]
-        clause = " or ".join("tedPublicationId eq '%s'" % n.replace("'", "''") for n in batch)
-        _, rows = fi_targets._ask("(%s) and %s" % (clause, window), top=TED_BATCH * 2,
+        # A CORRIGENDUM DELETES THE NOTICE IT SUPERSEDES, and the TED id that notice was sent
+        # under then survives only in the successor's `previousTedPublicationId`. 778153-2026
+        # was exactly that on 2026-11-09: published to TED, superseded in Hilma the next morning
+        # by 2026-061483, and reported missing by a control that looked at one field.
+        clause = " or ".join(
+            "tedPublicationId eq '{0}' or previousTedPublicationId/any(p: p eq '{0}')".format(
+                n.replace("'", "''")) for n in batch)
+        _, rows = fi_targets._ask("(%s) and %s" % (clause, window), top=TED_BATCH * 4,
                                   order=None, inside=inside)
-        found.update(str(r.get("tedPublicationId")) for r in rows if r.get("tedPublicationId"))
+        wanted = set(batch)
+        for r in rows:
+            held = [r.get("tedPublicationId")] + list(r.get("previousTedPublicationId") or [])
+            found.update(str(n) for n in held if n and str(n) in wanted)
     return found
 
 
@@ -159,10 +179,12 @@ def run(date, date_to=None, records=None, count=None, ted=True):
         # Proved for the LAST day of the window only. A catch-up window would cost one TED
         # request per day for a control whose failure mode is the same on every one of them,
         # and the day that matters is the one a person is about to read.
-        total, numbers = ted_notices(date_to)
+        total, collected, led_abroad = ted_notices(date_to)
+        numbers = [n for n in collected if n not in set(led_abroad)]
         found = in_hilma(numbers, date_to)
         missing = sorted(set(numbers) - found)
-        ted_report.update({"day": date_to, "ted_total": total, "collected": len(numbers),
+        ted_report.update({"day": date_to, "ted_total": total, "collected": len(collected),
+                           "led_abroad": led_abroad, "asked": len(numbers),
                            "matched": len(numbers) - len(missing), "missing": missing,
                            "ok": not missing})
 
@@ -206,8 +228,10 @@ def line(report):
     if ted.get("skipped"):
         parts.append("TED skipped")
     else:
-        parts.append("TED %s/%s %s" % (ted.get("matched"), ted.get("collected"),
-                                       "OK" if ted["ok"] else "MISSING %d" % len(ted["missing"])))
+        abroad = len(ted.get("led_abroad") or [])
+        parts.append("TED %s/%s%s %s" % (ted.get("matched"), ted.get("asked", ted.get("collected")),
+                                         " (+%d led abroad)" % abroad if abroad else "",
+                                         "OK" if ted["ok"] else "MISSING %d" % len(ted["missing"])))
     if open_.get("ours") is not None:
         parts.append("open %s vs %s (%+.1f%%) %s"
                      % (open_["portal"], open_["ours"],
