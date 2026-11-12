@@ -11,7 +11,9 @@ import shutil
 import sys
 import tempfile
 import unittest
+import urllib.parse
 import zipfile
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -234,6 +236,197 @@ class IntoAHome(Reset):
         done = fi_fetch.fetch(self.row(), self.home, with_text=False)
         self.assertEqual(done["documents_available"], "external")
         self.assertEqual(done["index"]["portal"]["reason"], "the portal served an empty body")
+
+
+USER = "buyer-facing@example.invalid"
+PASSWORD = "not-a-password"
+SECOND = " (on the second attempt)"
+
+
+class TheFailure(unittest.TestCase):
+    """`SignInFailed` carries its message and whether one more try could help."""
+
+    def test_an_answer_about_the_account_is_not_transient_by_default(self):
+        exc = fi_cloudia.SignInFailed("the portal refused the account")
+        self.assertIsInstance(exc, Exception)
+        self.assertFalse(exc.transient)
+        self.assertEqual(str(exc), "the portal refused the account")
+
+    def test_a_broken_browser_is_transient(self):
+        exc = fi_cloudia.SignInFailed("the form: timed out", transient=True)
+        self.assertTrue(exc.transient)
+        self.assertEqual(str(exc), "the form: timed out")
+
+
+class WhatTheBrowserSaid(unittest.TestCase):
+    """`_said`: the first line of what broke, with the account taken out of it."""
+
+    def test_the_first_line_only(self):
+        exc = RuntimeError("Timeout 30000ms exceeded.\n=== logs ===\nwaiting for selector")
+        self.assertEqual(fi_cloudia._said(exc, USER, PASSWORD), "Timeout 30000ms exceeded.")
+
+    def test_an_empty_message_gives_the_type_name(self):
+        self.assertEqual(fi_cloudia._said(RuntimeError(), USER, PASSWORD), "RuntimeError")
+        self.assertEqual(fi_cloudia._said(TimeoutError(""), USER, PASSWORD), "TimeoutError")
+
+    def test_the_password_and_the_user_name_become_account(self):
+        exc = RuntimeError("fill(%s) then fill(%s) failed" % (USER, PASSWORD))
+        said = fi_cloudia._said(exc, USER, PASSWORD)
+        self.assertEqual(said, "fill(<account>) then fill(<account>) failed")
+
+    def test_the_user_name_is_taken_out_in_its_encoded_forms_too(self):
+        user = "matti meikäläinen@example.invalid"
+        quoted = urllib.parse.quote(user)
+        plussed = urllib.parse.quote_plus(user)
+        self.assertNotEqual(quoted, plussed)
+        exc = RuntimeError("goto https://x.example/?a=%s&b=%s failed" % (quoted, plussed))
+        said = fi_cloudia._said(exc, user, "pw-secret")
+        self.assertEqual(said, "goto https://x.example/?a=<account>&b=<account> failed")
+
+    def test_cut_to_two_hundred_characters(self):
+        self.assertEqual(fi_cloudia._said(RuntimeError("x" * 500), USER, PASSWORD), "x" * 200)
+        short = fi_cloudia._said(RuntimeError("x" * 200), USER, PASSWORD)
+        self.assertEqual(short, "x" * 200)
+
+    def test_nothing_of_the_account_survives_a_long_line(self):
+        exc = RuntimeError(("step " * 30) + USER + " " + PASSWORD + (" tail" * 60) + "\nmore")
+        said = fi_cloudia._said(exc, USER, PASSWORD)
+        self.assertLessEqual(len(said), 200)
+        self.assertNotIn(USER, said)
+        self.assertNotIn(PASSWORD, said)
+        self.assertNotIn("more", said)
+        self.assertIn("<account>", said)
+
+
+class OneMoreTry(Reset):
+    """`session`: a broken browser or a slow page is tried twice, the account itself once."""
+
+    row = {"documents_host": "tarjouspalvelu.fi", "documents_url": URL,
+           "documents_available": "external"}
+
+    def setUp(self):
+        super().setUp()
+        self._pause = fi_cloudia.RETRY_PAUSE
+        self.addCleanup(setattr, fi_cloudia, "RETRY_PAUSE", self._pause)
+        fi_cloudia.RETRY_PAUSE = 0
+        os.environ["CLOUDIA_USERNAME"] = USER
+        os.environ["CLOUDIA_PASSWORD"] = PASSWORD
+        self.calls = []
+        self.slept = []
+        patcher = mock.patch("time.sleep", side_effect=lambda s: self.slept.append(s))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def answers(self, *outcomes):
+        """Each call to the stub takes the next outcome: an exception is raised, else returned."""
+        queue = list(outcomes)
+
+        def sign_in(user, password):
+            self.calls.append((user, password))
+            outcome = queue.pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+        fi_cloudia.sign_in = sign_in
+
+    def gives_up(self):
+        with self.assertRaises(fi_cloudia.SignInFailed) as caught:
+            fi_cloudia.session()
+        return str(caught.exception)
+
+    def test_the_pause_is_thirty_seconds(self):
+        self.assertEqual(self._pause, 30)
+
+    def test_a_broken_browser_then_a_good_one_signs_in(self):
+        self.answers(fi_cloudia.SignInFailed("the front page: Timeout", transient=True),
+                     ("ASP.NET_SessionId=s1", "TestAgent"))
+        fi_cloudia.session()
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(self.calls[0], (USER, PASSWORD))
+        self.assertEqual(self.calls[1], (USER, PASSWORD))
+        self.assertEqual(self.slept, [0])
+        self.assertFalse(fi_cloudia._SESSION.get("failed"))
+
+    def test_the_pause_comes_from_retry_pause(self):
+        fi_cloudia.RETRY_PAUSE = 7
+        self.answers(fi_cloudia.SignInFailed("the form: Timeout", transient=True),
+                     ("c=1", "TestAgent"))
+        fi_cloudia.session()
+        self.assertEqual(self.slept, [7])
+
+    def test_a_missing_browser_is_also_tried_twice(self):
+        self.answers(RuntimeError("Error"), ("c=1", "TestAgent"))
+        fi_cloudia.session()
+        self.assertEqual(len(self.calls), 2)
+
+    def test_two_broken_browsers_say_the_last_and_that_it_was_the_second(self):
+        self.answers(fi_cloudia.SignInFailed("the front page: Timeout", transient=True),
+                     fi_cloudia.SignInFailed("the cookie banner: Target closed", transient=True))
+        self.assertEqual(self.gives_up(), "the cookie banner: Target closed" + SECOND)
+        self.assertEqual(len(self.calls), 2)
+
+    def test_an_exception_that_is_not_a_sign_in_failure_names_its_type(self):
+        self.answers(RuntimeError("Error"), RuntimeError("Error"))
+        self.assertEqual(self.gives_up(), "the browser could not sign in (RuntimeError)" + SECOND)
+
+    def test_a_refused_account_is_tried_once_without_a_pause(self):
+        self.answers(fi_cloudia.SignInFailed("the portal refused the account"),
+                     ("never", "used"))
+        self.assertEqual(self.gives_up(), "the portal refused the account")
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.slept, [])
+
+    def test_a_refusal_on_the_second_attempt_says_so(self):
+        self.answers(fi_cloudia.SignInFailed("single sign-on: Timeout", transient=True),
+                     fi_cloudia.SignInFailed("the portal asked for a second factor"))
+        self.assertEqual(self.gives_up(), "the portal asked for a second factor" + SECOND)
+        self.assertEqual(len(self.calls), 2)
+
+    def test_never_a_third_attempt(self):
+        self.answers(fi_cloudia.SignInFailed("a", transient=True),
+                     fi_cloudia.SignInFailed("b", transient=True),
+                     ("c=1", "TestAgent"))
+        self.gives_up()
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(len(self.slept), 1)
+
+    def test_a_failure_is_remembered_for_the_run(self):
+        self.answers(fi_cloudia.SignInFailed("the way back: Timeout", transient=True),
+                     fi_cloudia.SignInFailed("the way back: Timeout", transient=True))
+        first = self.gives_up()
+        self.assertTrue(fi_cloudia._SESSION["failed"])
+        for _ in range(2):
+            self.assertEqual(self.gives_up(), first)
+        self.assertEqual(len(self.calls), 2)
+
+    def test_a_remembered_refusal_does_not_call_the_browser_again(self):
+        self.answers(fi_cloudia.SignInFailed("the portal refused the account"))
+        first = self.gives_up()
+        self.assertEqual(self.gives_up(), first)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_one_broken_browser_no_longer_loses_the_night(self):
+        self.answers(RuntimeError("Error"), ("ASP.NET_SessionId=s1", "TestAgent"))
+        out = fi_cloudia.fetch_into(self.home, self.row,
+                                    get=served(archive([("a.pdf", b"%PDF-1")])))
+        self.assertEqual(out["status"], "read")
+        self.assertEqual(len(self.calls), 2)
+
+    def test_the_reason_in_the_index_carries_the_message(self):
+        self.answers(fi_cloudia.SignInFailed("the cookies: none were set", transient=True),
+                     fi_cloudia.SignInFailed("the cookies: none were set", transient=True))
+        for _ in range(2):
+            out = fi_cloudia.fetch_into(self.home, self.row, get=served(b""))
+            self.assertEqual(out["status"], "failed")
+            self.assertEqual(out["reason"],
+                             "sign-in failed: the cookies: none were set" + SECOND)
+        self.assertEqual(len(self.calls), 2)
+
+    def test_the_reason_after_two_missing_browsers(self):
+        self.answers(RuntimeError("Error"), RuntimeError("Error"))
+        out = fi_cloudia.fetch_into(self.home, self.row, get=served(b""))
+        self.assertEqual(out["reason"],
+                         "sign-in failed: the browser could not sign in (RuntimeError)" + SECOND)
 
 
 if __name__ == "__main__":
