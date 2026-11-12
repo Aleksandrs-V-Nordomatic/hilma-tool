@@ -104,6 +104,13 @@ GET https://tarjouspalvelu.fi/Zip/TarjousPyynnonLiitteet/{tpId}     # tpId = id=
   the reason in `index.json` under `portal`.
 - **The portal step logs counts only** — no tender number, title or account — because the
   repository and its logs are public. The account arrives in the `CLOUDIA_USERNAME` / `CLOUDIA_PASSWORD` secrets.
+- **A failed sign-in says where it failed.** The reason in `index.json` names the step — the
+  front page, the cookie banner, asking how the account signs in, single sign-on, the form,
+  the way back, the cookies — and, when the browser broke, the first line of what it said with
+  the user name and password replaced by `<account>`.
+- **A broken browser or a slow page gets one more try**, 30 seconds later, and the reason then
+  ends "(on the second attempt)". An answer about the account itself — refused, a second factor,
+  a password that does not lead back — is never retried, so the account is tried once per run.
 
 `python3 fi_cloudia.py --check` signs in and downloads nothing.
 

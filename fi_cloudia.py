@@ -35,6 +35,7 @@ import io
 import os
 import re
 import sys
+import time
 import urllib.parse
 import zipfile
 
@@ -62,8 +63,21 @@ SECOND_FACTOR = re.compile(r"vahvistuskoodi|tunnistautu|kaksivaihe|authenticator
                            r"one.time|captcha|recaptcha|turnstile", re.I)
 
 
+# A browser that broke or a page that was slow is tried once more after this pause. The night of
+# 2026-11-11 lost all fourteen of its portal tenders to one browser error at sign-in.
+RETRY_PAUSE = 30
+
+
 class SignInFailed(Exception):
-    """The account did not get us in. The message names the step and never the account."""
+    """The account did not get us in. The message names the step and never the account.
+
+    `transient` is True when the browser broke or a page did not load in time -- a second attempt
+    can cure that. An answer about the account itself is never retried.
+    """
+
+    def __init__(self, message, transient=False):
+        super().__init__(message)
+        self.transient = transient
 
 
 # ONE SIGN-IN PER RUN, AND ONE FAILED SIGN-IN PER RUN. A night fetches dozens of tenders; a
@@ -110,33 +124,43 @@ def sign_in(user, password):
     The steps are the ones the portal's own script takes, proved from a runner on 2026-11-09:
     ask which sign-in the address uses, then either Cloudia's single sign-on form or the local
     one. Each failure is raised with the step it happened at and no page text that could carry
-    the account.
+    the account; a browser error keeps its first line, with the account masked by `_said`.
     """
+    from playwright.sync_api import Error as PwError
     from playwright.sync_api import TimeoutError as PwTimeout
     from playwright.sync_api import sync_playwright
 
+    step = "starting the browser"
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
         try:
+            browser = pw.chromium.launch(headless=True)
+        except PwError as exc:
+            raise SignInFailed("the browser failed at %s: %s" % (step, _said(exc, user, password)),
+                               transient=True)
+        try:
+            step = "opening the front page"
             ctx = browser.new_context(locale="fi-FI")
             page = ctx.new_page()
             # `domcontentloaded`, never `networkidle`: the portal keeps a connection open and
             # an idle network never comes.
             page.goto(BASE + "/Default/Index", wait_until="domcontentloaded", timeout=60000)
+            step = "declining the cookie banner"
             for label in ("Deny", "Kiellä", "Hylkää"):       # cookie banner: decline the extras
                 button = page.locator("button:has-text('%s')" % label)
                 if button.count():
                     button.first.click()
                     break
 
+            step = "asking how the account signs in"
             try:
                 method = ctx.request.get(BASE + "/Authentication/TarkistaOnkoSSO",
                                          params={"userName": user}).json().get("loginMethod")
             except Exception as exc:
                 raise SignInFailed("the portal did not say how this account signs in (%s)"
-                                   % type(exc).__name__)
+                                   % type(exc).__name__, transient=True)
 
             if method == "SSO":
+                step = "opening single sign-on"
                 page.goto(BASE + "/Default/LoginSSO?userName=" + urllib.parse.quote(user),
                           wait_until="domcontentloaded", timeout=60000)
                 try:
@@ -148,6 +172,7 @@ def sign_in(user, password):
                 # nothing.
                 if "login.cloudia.net" not in page.url:
                     raise SignInFailed("single sign-on did not reach the Cloudia form")
+                step = "filling the Cloudia form"
                 page.wait_for_selector("#username", timeout=30000)
                 # A Tab after each field, because the Vaadin form only takes a value it has
                 # seen the field lose focus over.
@@ -160,6 +185,7 @@ def sign_in(user, password):
                 page.keyboard.press("Tab")
                 page.click("#login-btn")
             elif method == "LOCAL":
+                step = "filling the local form"
                 page.fill("#user", user)
                 page.click("#continue")
                 page.wait_for_selector("#password", timeout=30000)
@@ -170,6 +196,7 @@ def sign_in(user, password):
                 # role. Both are about the account, and retrying will not change them.
                 raise SignInFailed("the portal refused the account: loginMethod=%s" % method)
 
+            step = "waiting to be sent back to the portal"
             try:
                 page.wait_for_url(re.compile(r"^https://(www\.)?tarjouspalvelu\.fi/"),
                                   timeout=45000, wait_until="domcontentloaded")
@@ -181,12 +208,20 @@ def sign_in(user, password):
                 raise SignInFailed("the password did not lead back to the portal")
             page.wait_for_timeout(2000)
 
+            step = "taking the session's cookies"
             cookies = ctx.cookies(BASE)
             agent = page.evaluate("navigator.userAgent")
         except PwTimeout as exc:
-            raise SignInFailed("a sign-in page did not load in time (%s)" % type(exc).__name__)
+            raise SignInFailed("a sign-in page did not load in time at %s (%s)"
+                               % (step, type(exc).__name__), transient=True)
+        except PwError as exc:                 # crashed, closed, refused a click or a navigation
+            raise SignInFailed("the browser failed at %s: %s" % (step, _said(exc, user, password)),
+                               transient=True)
         finally:
-            browser.close()
+            try:
+                browser.close()
+            except PwError:
+                pass
 
     if not cookies:
         raise SignInFailed("signed in, but the portal set no cookie")
@@ -202,16 +237,36 @@ def session(fresh=False):
     account = _account()
     if account is None:
         raise SignInFailed("no supplier account is configured for this run")
-    try:
-        cookie, agent = sign_in(*account)
-    except SignInFailed as exc:
-        _SESSION["failed"] = str(exc)
-        raise
-    except Exception as exc:                   # the browser itself: missing, crashed, refused
-        _SESSION["failed"] = "the browser could not sign in (%s)" % type(exc).__name__
-        raise SignInFailed(_SESSION["failed"])
+    for attempt in (1, 2):
+        try:
+            cookie, agent = sign_in(*account)
+            break
+        except SignInFailed as exc:
+            failure = exc
+        except Exception as exc:               # the browser itself: missing, or not Playwright's
+            failure = SignInFailed("the browser could not sign in (%s)" % type(exc).__name__,
+                                   transient=True)
+        if not failure.transient or attempt == 2:
+            _SESSION["failed"] = str(failure) + (" (on the second attempt)" if attempt == 2
+                                                 else "")
+            raise SignInFailed(_SESSION["failed"])
+        time.sleep(RETRY_PAUSE)
     _SESSION.update(cookie=cookie, agent=agent)
     return cookie, agent
+
+
+def _said(exc, user, password):
+    """The first line of what the browser said, with the account masked.
+
+    Playwright's message names the call and often the address it was on, and the single sign-on
+    address carries the user name. So both spellings of it, and the password, are masked before
+    the line goes anywhere -- it ends up in the tender's private `index.json`, never the log.
+    """
+    line = (str(exc).strip().splitlines() or [type(exc).__name__])[0]
+    for secret in (password, user, urllib.parse.quote(user), urllib.parse.quote_plus(user)):
+        if secret:
+            line = line.replace(secret, "<account>")
+    return line[:200]
 
 
 def download(tp, cookie, agent, get=None):
