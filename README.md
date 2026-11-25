@@ -9,6 +9,10 @@ Latvia is `eis-tool`, Lithuania `epps-tool`, Estonia `rhr-tool`. One repository 
 country per repository, and the same `day.json` beside the same folders in every one of them — so
 a reader that knows one country's layout knows this one.
 
+**Proprietary. All rights reserved; no licence is granted and no use is permitted — see
+[LICENSE](LICENSE).** This includes copying, running, modifying and AI training. Contributions
+are not accepted.
+
 ## One country
 
 `--country FI` is not decoration and there is no default. The destination folder is derived from

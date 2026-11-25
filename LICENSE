@@ -1,32 +1,104 @@
 Copyright (c) 2026 the owner of this repository. All rights reserved.
 
-PROPRIETARY — NO LICENCE IS GRANTED
+PROPRIETARY — NO LICENCE IS GRANTED — NO USE IS PERMITTED
 
-This source code is published for visibility only. Publication is not permission.
+1. DEFINITIONS
 
-No person or organisation other than the copyright holder is granted any right to use,
-copy, modify, merge, publish, distribute, sublicense, sell, host, execute, or create
-derivative works from this software or any part of it, in source or binary form, for any
-purpose, commercial or non-commercial, with or without attribution.
+"Rights Holder" means the owner of this repository and any other person or legal entity
+that holds the copyright or the economic rights in the Work.
 
-No licence is granted by implication, estoppel, or otherwise. Reading this code confers
-no rights. Neither does copying it into an editor, a model, a training corpus, or another
-repository.
+"Work" means everything in this repository, in every branch, tag, commit, release,
+artefact and package: source code, scripts, workflows, configuration, tests, fixtures,
+documentation, and their structure, sequence and organisation. It includes every earlier
+version. It excludes the materials listed in section 9.
 
-Contributions are not accepted. Pull requests, patches and issues are not reviewed and
-create no obligation; anything submitted regardless is not thereby licensed to anyone.
+"You" means every person, organisation and automated system other than the Rights Holder
+and those acting on the Rights Holder's instructions and solely on its behalf.
 
-THE ONE THING THIS LICENCE CANNOT DO. GitHub's Terms of Service require that a repository
-made public on that platform may be viewed and forked by other GitHub users through the
-platform's own features. That permission comes from the platform, not from this licence,
-and it extends no further: a fork grants no right to run, modify, distribute or otherwise
-use this software.
+2. NO LICENCE
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
-OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+The Work is not open source, source-available or free software. No licence or other right
+is granted to You, expressly, by implication, by estoppel, by custom or otherwise.
+Public visibility is a technical setting. It is not a grant of any right, an offer, a
+waiver or a dedication to the public domain.
 
-The public procurement documents this software downloads are published by the Republic of
-Latvia and are not covered by this notice. This notice covers the software only.
+3. PROHIBITED WITHOUT PRIOR WRITTEN PERMISSION
+
+You may not, for any purpose, commercial or non-commercial, private, internal,
+educational, research or evaluative, in whole or in part, with or without attribution:
+
+  a. use, run, execute, compile, build, install, deploy, host or offer the Work as a
+     service, or have anyone else do so;
+  b. copy, download, clone, mirror, archive, cache, scrape or otherwise reproduce the Work;
+  c. modify, translate, port, adapt, refactor or reimplement the Work, or create any
+     derivative work from it, by hand or with any tool;
+  d. publish, distribute, transmit, display, sell, rent, lend, sublicense, assign or
+     otherwise make the Work available to anyone;
+  e. include the Work, or any excerpt of it, in another repository, product, service,
+     dataset, package, image, publication or course;
+  f. remove, alter or obscure this notice or any other notice of rights.
+
+Permission is valid only if it is given in writing, signed by the Rights Holder, and names
+the person permitted, the part of the Work and the use. It is personal, cannot be
+transferred and can be withdrawn at any time unless it says otherwise.
+
+4. ARTIFICIAL INTELLIGENCE, AND TEXT AND DATA MINING
+
+The Rights Holder expressly reserves all rights of reproduction and extraction for text
+and data mining under Article 4(3) of Directive (EU) 2019/790 and the national laws that
+implement it. This is an express reservation of rights for the purposes of that Article
+and of Article 53(1)(c) of Regulation (EU) 2024/1689.
+
+You may not use the Work, or any part of it, to train, fine-tune, distil, evaluate,
+benchmark, ground or prompt any machine-learning or artificial-intelligence system, to
+build a dataset, index or embedding, or to generate code or any other output that
+reproduces or is derived from the Work.
+
+5. FORKS AND THE HOSTING PLATFORM
+
+Where the terms of the platform that hosts this repository require that its users be able
+to view the Work or fork it within that platform, those users have that permission from
+those terms alone, only to the extent the terms require, and only through the platform's
+own features. This notice adds nothing to it. This notice stays attached to every fork.
+Nothing here alters the rights the Rights Holder granted to the platform by accepting its
+terms.
+
+6. NO CONTRIBUTIONS
+
+Contributions are not accepted and are not reviewed. Submitting anything creates no
+obligation for the Rights Holder and gives You no right in the Work.
+
+7. BREACH
+
+Any use outside this notice is unauthorised and may infringe copyright, database rights
+and other rights. On demand, or on becoming aware of the breach, You must stop at once and
+destroy every copy of the Work and every derivative of it. The Rights Holder reserves
+every remedy the law allows, including injunctions, damages, an account of profits,
+removal from any platform and the recovery of costs. A delay or failure to enforce a right
+is not a waiver of it.
+
+8. MANDATORY LAW AND SEVERABILITY
+
+Nothing here excludes a right that mandatory law does not allow to be excluded. Such a
+right applies only to the minimum extent that law requires. If any provision is
+unenforceable, it is limited to the minimum extent necessary, the rest stays in force, and
+no licence arises in its place.
+
+9. MATERIALS THIS NOTICE DOES NOT COVER
+
+Third-party software that the Work depends on, calls, downloads or installs, and
+third-party software contained in any package or image, remains under its own licence.
+Nothing here restricts a right that licence gives You in that software. Procurement
+documents, notices and data obtained from public registers and platforms belong to their
+respective publishers and are not claimed here.
+
+10. NO WARRANTY AND NO LIABILITY
+
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND
+NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE RIGHTS HOLDER IS NOT LIABLE
+FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE WORK OR FROM ANY USE OF IT.
+
+11. RESERVATION
+
+Every right not mentioned here is reserved.
